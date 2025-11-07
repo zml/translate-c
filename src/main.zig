@@ -87,10 +87,12 @@ pub const usage =
     \\Usage {s}: [options] file [CC options]
     \\
     \\Options:
-    \\  --help              Print this message
-    \\  --version           Print translate-c version
-    \\  -fmodule-libs       Import libraries as modules
-    \\  -fno-module-libs    (default) Install libraries next to output file
+    \\  --help                      Print this message
+    \\  --version                   Print translate-c version
+    \\  -fmodule-libs               Import libraries as modules
+    \\  -fno-module-libs            (default) Install libraries next to output file
+    \\  -fpub-static                (default) Translate static functions as pub
+    \\  -fno-pub-static             Do not translate static functions as pub
     \\
     \\
 ;
@@ -99,6 +101,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
     const gpa = d.comp.gpa;
 
     var module_libs = false;
+    var pub_static = true;
 
     const aro_args = args: {
         var i: usize = 0;
@@ -121,6 +124,10 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
                 module_libs = true;
             } else if (mem.eql(u8, arg, "-fno-module-libs")) {
                 module_libs = false;
+            } else if (mem.eql(u8, arg, "-fpub-static")) {
+                pub_static = true;
+            } else if (mem.eql(u8, arg, "-fno-pub-static")) {
+                pub_static = false;
             } else {
                 i += 1;
             }
@@ -208,6 +215,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
         .pp = &pp,
         .tree = &c_tree,
         .module_libs = module_libs,
+        .pub_static = pub_static,
     });
     defer gpa.free(rendered_zig);
 
