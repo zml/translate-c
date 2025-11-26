@@ -41,6 +41,9 @@ jobs:
           submodules: true
 
       - uses: https://codeberg.org/mlugg/setup-zig@fixes
+        with:
+          # The cache reuse logic in setup-zig is only safe in a container.
+          use-cache: false
 
       - name: Build
         run: zig build
