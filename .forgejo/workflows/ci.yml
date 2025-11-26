@@ -19,10 +19,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache/global
-  ZIG_LOCAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache/local
-
 jobs:
   build:
     timeout-minutes: 30
