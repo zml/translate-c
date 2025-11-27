@@ -10,6 +10,7 @@ void func(struct Foo *a, enum Bar **b);
 
 // translate
 // target=x86_64-windows-msvc
+// args = -fdefault-init
 //
 // pub const struct_Foo = extern struct {
 //     x: c_int = 0,

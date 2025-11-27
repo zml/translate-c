@@ -9,8 +9,8 @@ struct TypeB {
 // translate
 //
 // pub const struct_TypeB = extern struct {
-//     a_member: [*c]TypeA = null,
+//     a_member: [*c]TypeA,
 // };
 // pub const TypeA = extern struct {
-//     b_member: [*c]struct_TypeB = null,
+//     b_member: [*c]struct_TypeB,
 // };

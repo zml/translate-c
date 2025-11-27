@@ -6,6 +6,7 @@ struct b {
 };
 
 // translate
+// args = -fdefault-init
 //
 // const struct_unnamed_1 = extern struct {
 //     x: c_int = 0,

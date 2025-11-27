@@ -24,6 +24,7 @@ enum i {
 
 // translate
 // target=native-linux
+// args = -fdefault-init
 //
 // pub const a: c_int = 0;
 // pub const b: c_int = 1;

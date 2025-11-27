@@ -17,7 +17,7 @@ extern union OpenGLProcs glProcs;
 // pub const PFNGLCLEARPROC = ?*const fn (mask: GLbitfield) callconv(.c) void;
 // pub const OpenGLProc = ?*const fn () callconv(.c) void;
 // const struct_unnamed_1 = extern struct {
-//     Clear: PFNGLCLEARPROC = null,
+//     Clear: PFNGLCLEARPROC,
 // };
 // pub const union_OpenGLProcs = extern union {
 //     ptr: [1]OpenGLProc,

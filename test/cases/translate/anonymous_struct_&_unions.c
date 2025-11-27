@@ -7,6 +7,7 @@ typedef struct {
 void foo(outer *x) { x->y = x->x; }
 
 // translate
+// args = -fdefault-init
 //
 // const struct_unnamed_2 = extern struct {
 //     y: c_int = 0,

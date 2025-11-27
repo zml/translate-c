@@ -8,6 +8,7 @@ struct foo {
 };
 
 // translate
+// args = -fdefault-init
 //
 // pub const fnptr_ty = ?*const fn () callconv(.c) void;
 // pub const fnptr_attr_ty = ?*const fn () callconv(.c) void;

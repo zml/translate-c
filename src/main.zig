@@ -87,10 +87,18 @@ pub const usage =
     \\Usage {s}: [options] file [CC options]
     \\
     \\Options:
-    \\  --help              Print this message
-    \\  --version           Print translate-c version
-    \\  -fmodule-libs       Import libraries as modules
-    \\  -fno-module-libs    (default) Install libraries next to output file
+    \\  --help                      Print this message
+    \\  --version                   Print translate-c version
+    \\  -fmodule-libs               Import libraries as modules
+    \\  -fno-module-libs            (default) Install libraries next to output file
+    \\  -fpub-static                (default) Translate static functions as pub
+    \\  -fno-pub-static             Do not translate static functions as pub
+    \\  -ffunc-bodies               (default) Translate function bodies
+    \\  -fno-func-bodies            Do not translate function bodies
+    \\  -fkeep-macro-literals       (default) Preserve macro names for literals
+    \\  -fno-keep-macro-literals    Do not preserve macro names for literals
+    \\  -fdefault-init              Default initialize struct fields
+    \\  -fno-default-init           (default) Do not default initialize struct fields
     \\
     \\
 ;
@@ -99,6 +107,10 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
     const gpa = d.comp.gpa;
 
     var module_libs = false;
+    var pub_static = true;
+    var func_bodies = true;
+    var keep_macro_literals = true;
+    var default_init = false;
 
     const aro_args = args: {
         var i: usize = 0;
@@ -121,6 +133,22 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
                 module_libs = true;
             } else if (mem.eql(u8, arg, "-fno-module-libs")) {
                 module_libs = false;
+            } else if (mem.eql(u8, arg, "-fpub-static")) {
+                pub_static = true;
+            } else if (mem.eql(u8, arg, "-fno-pub-static")) {
+                pub_static = false;
+            } else if (mem.eql(u8, arg, "-ffunc-bodies")) {
+                func_bodies = true;
+            } else if (mem.eql(u8, arg, "-fno-func-bodies")) {
+                func_bodies = false;
+            } else if (mem.eql(u8, arg, "-fkeep-macro-literals")) {
+                keep_macro_literals = true;
+            } else if (mem.eql(u8, arg, "-fno-keep-macro-literals")) {
+                keep_macro_literals = false;
+            } else if (mem.eql(u8, arg, "-fdefault-init")) {
+                default_init = true;
+            } else if (mem.eql(u8, arg, "-fno-default-init")) {
+                default_init = false;
             } else {
                 i += 1;
             }
@@ -208,6 +236,10 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
         .pp = &pp,
         .tree = &c_tree,
         .module_libs = module_libs,
+        .pub_static = pub_static,
+        .func_bodies = func_bodies,
+        .keep_macro_literals = keep_macro_literals,
+        .default_init = default_init,
     });
     defer gpa.free(rendered_zig);
 

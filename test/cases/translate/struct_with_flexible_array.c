@@ -2,6 +2,7 @@ struct foo { int x; int y[]; };
 struct bar { int x; int y[0]; };
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_foo = extern struct {
 //     x: c_int = 0,

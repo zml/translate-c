@@ -7,6 +7,7 @@ struct __attribute__((packed)) foo {
 
 // translate
 // target=native-windows-msvc
+// args = -fdefault-init
 //
 // const struct_unnamed_1 = extern struct {
 //     _padding: u32 align(1) = 0,

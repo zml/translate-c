@@ -30,6 +30,7 @@ int foo_quux_bar1(FooQuux *foo);
 int foo_quux_bar2_(FooQuux *foo);
 
 // translate
+// args = -fdefault-init
 //
 // pub const Foo = extern struct {
 //     foo: c_int = 0,

@@ -10,6 +10,7 @@ union Foo{
 } __attribute__((packed));
 
 // translate
+// args = -fdefault-init
 //
 // const struct_unnamed_1 = extern struct {
 //     b: c_int = 0,

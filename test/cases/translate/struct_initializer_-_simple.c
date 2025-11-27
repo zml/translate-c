@@ -5,6 +5,7 @@ struct {int x,y;} s2 = {.y = 2, .x=1};
 foo s3 = { 123 };
 
 // translate
+// args = -fdefault-init
 //
 // pub const foo = extern struct {
 //     x: c_int = 0,

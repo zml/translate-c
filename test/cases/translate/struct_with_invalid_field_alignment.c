@@ -19,6 +19,7 @@ struct baz {
 
 // translate
 // target=x86_64-linux
+// args = -fdefault-init
 //
 // pub const struct_foo = extern struct {
 //     x: c_int = 0,

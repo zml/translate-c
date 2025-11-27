@@ -8,6 +8,7 @@ typedef struct {
 
 // translate
 // target=native-linux
+// args = -fdefault-init
 //
 // pub const FooA: c_int = 0;
 // pub const FooB: c_int = 1;

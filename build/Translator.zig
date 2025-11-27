@@ -46,9 +46,19 @@ pub const Options = struct {
     c_source_file: Build.LazyPath,
     target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    module_libs: bool = true,
     link_libc: bool = true,
     warnings: enum { ignore, show, @"error" } = .ignore,
+
+    /// Should libraries be imported as modules or installed.
+    module_libs: bool = true,
+    /// Should static functions be translated as pub.
+    pub_static: ?bool = null,
+    /// Should function bodies be translated.
+    func_bodies: ?bool = null,
+    /// Should literals that were expanded from macros be translated as uses of those macros.
+    keep_macro_literals: ?bool = null,
+    /// Should struct fields be default initalized.
+    default_init: ?bool = null,
 };
 
 pub fn init(translate_c_dep: *Build.Dependency, options: Options) Translator {
@@ -144,9 +154,11 @@ pub fn initInner(
 
     appendIncludeArg(run, "-resource-dir", tc_conf.aro_resource_dir);
 
-    if (options.module_libs) {
-        run.addArg("-fmodule-libs");
-    }
+    addFlag(run, "module-libs", options.module_libs);
+    addFlag(run, "pub-static", options.pub_static);
+    addFlag(run, "func-bodies", options.func_bodies);
+    addFlag(run, "keep-macro-literals", options.keep_macro_literals);
+    addFlag(run, "default-init", options.default_init);
 
     return .{
         .output_file = output_file,
@@ -215,6 +227,13 @@ pub fn defineCMacro(t: *const Translator, name: []const u8, value: ?[]const u8) 
     const macro = b.fmt("-D{s}={s}", .{ name, value orelse "1" });
     t.mod.c_macros.append(b.allocator, macro) catch @panic("OOM");
     t.run.addArg(macro);
+}
+
+fn addFlag(run: *Build.Step.Run, name: []const u8, opt_value: ?bool) void {
+    const value = opt_value orelse return;
+    const prefix = if (value) "-f" else "-fno";
+    const arg = run.step.owner.fmt("{s}{s}", .{ prefix, name });
+    run.addArg(arg);
 }
 
 /// Helper function for adding things like `-I /path/to/include/dir` to arg vectors.

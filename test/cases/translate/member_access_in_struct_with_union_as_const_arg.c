@@ -12,6 +12,7 @@ int my_func(const struct my_struct* s) {
 }
 
 // translate
+// args = -fdefault-init
 //
 // const union_unnamed_1 = extern union {
 //     internal_suffix: c_int,

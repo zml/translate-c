@@ -6,6 +6,7 @@ struct Foo {
 } a = {};
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_Bar_1 = extern struct {
 //     a: c_int = 0,

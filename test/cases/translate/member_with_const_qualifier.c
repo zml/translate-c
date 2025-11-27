@@ -7,7 +7,7 @@ extern int bar(struct Foo *);
 // translate
 //
 // pub const struct_Foo = extern struct {
-//     a: c_int = 0,
+//     a: c_int,
 //     pub const foo = __root.foo;
 //     pub const bar = __root.bar;
 // };

@@ -14,7 +14,7 @@ void foo(void) {
 // translate
 //
 // pub const struct_Foo = extern struct {
-//     b: c_int = 0,
+//     b: c_int,
 // };
 // pub extern var a: struct_Foo;
 // pub export var b: f32 = 2;

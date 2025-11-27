@@ -5,7 +5,7 @@ struct Foo {
 // translate
 //
 // const struct_Foo = extern struct {
-//     x: c_int = 0,
+//     x: c_int,
 // };
 // 
 // pub const Foo = struct_Foo;

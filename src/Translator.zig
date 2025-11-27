@@ -73,6 +73,15 @@ comp: *aro.Compilation,
 /// The Preprocessor that produced the source for `tree`.
 pp: *const aro.Preprocessor,
 
+/// Should static functions be translated as `pub`.
+pub_static: bool,
+/// Should function bodies be translated.
+func_bodies: bool,
+/// Should macro names of literals be preserved.
+keep_macro_literals: bool,
+/// Should struct fields be default initialized.
+default_init: bool,
+
 gpa: mem.Allocator,
 arena: mem.Allocator,
 
@@ -218,6 +227,10 @@ pub const Options = struct {
     pp: *const aro.Preprocessor,
     tree: *const aro.Tree,
     module_libs: bool,
+    pub_static: bool,
+    func_bodies: bool,
+    keep_macro_literals: bool,
+    default_init: bool,
 };
 
 pub fn translate(options: Options) mem.Allocator.Error![]u8 {
@@ -234,6 +247,10 @@ pub fn translate(options: Options) mem.Allocator.Error![]u8 {
         .comp = options.comp,
         .pp = options.pp,
         .tree = options.tree,
+        .pub_static = options.pub_static,
+        .func_bodies = options.func_bodies,
+        .keep_macro_literals = options.keep_macro_literals,
+        .default_init = options.default_init,
     };
     translator.global_scope.* = Scope.Root.init(&translator);
     defer {
@@ -653,7 +670,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
             // C99 introduced designated initializers for structs. Omitted fields are implicitly
             // initialized to zero. Some C APIs are designed with this in mind. Defaulting to zero
             // values for translated struct fields permits Zig code to comfortably use such an API.
-            const default_value = if (container_kind == .@"struct")
+            const default_value = if (t.default_init and container_kind == .@"struct")
                 try t.createZeroValueNode(field.qt, field_type, .no_as)
             else
                 null;
@@ -678,7 +695,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                 .name = "_padding",
                 .type = try ZigTag.type.create(t.arena, try std.fmt.allocPrint(t.arena, "u{d}", .{padding_bits})),
                 .alignment = @divExact(alignment_bits, 8),
-                .default_value = if (container_kind == .@"struct")
+                .default_value = if (t.default_init and container_kind == .@"struct")
                     ZigTag.zero_literal.init()
                 else
                     null,
@@ -725,14 +742,12 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
 fn transFnDecl(t: *Translator, scope: *Scope, function: Node.Function) Error!void {
     const func_ty = function.qt.get(t.comp, .func).?;
 
-    const is_pub = scope.id == .root;
-
     const fn_name = t.tree.tokSlice(function.name_tok);
     if (scope.getAlias(fn_name) != null or t.global_scope.containsNow(fn_name))
         return; // Avoid processing this decl twice
 
     const fn_decl_loc = function.name_tok;
-    const has_body = function.body != null and func_ty.kind != .variadic;
+    const has_body = function.body != null and func_ty.kind != .variadic and t.func_bodies;
     if (function.body != null and func_ty.kind == .variadic) {
         try t.warn(scope, function.name_tok, "TODO unable to translate variadic function, demoted to extern", .{});
     }
@@ -743,7 +758,7 @@ fn transFnDecl(t: *Translator, scope: *Scope, function: Node.Function) Error!voi
         .is_always_inline = is_always_inline,
         .is_extern = !has_body,
         .is_export = !function.static and has_body and !is_always_inline and !function.@"inline",
-        .is_pub = is_pub,
+        .is_pub = scope.id == .root and (!function.static or t.pub_static),
         .has_body = has_body,
         .cc = if (function.qt.getAttribute(t.comp, .calling_convention)) |some| switch (some.cc) {
             .c => .c,
@@ -3372,6 +3387,51 @@ fn transCall(
 
 const SuppressCast = enum { with_as, no_as };
 
+/// Attempt to translate literal as the name of the simple macro
+/// it was expanded from.
+fn checkLiteralMacro(t: *Translator, tok: TokenIndex, used: ResultUsed) !?ZigNode {
+    if (!t.keep_macro_literals) return null;
+    const expansion_locs = t.pp.expansionSlice(tok);
+    if (expansion_locs.len == 0) return null;
+
+    const last_expand = expansion_locs[0];
+    const source = t.comp.getSource(last_expand.id);
+    var tokenizer: aro.Tokenizer = .{
+        .buf = source.buf,
+        .langopts = t.comp.langopts,
+        .source = last_expand.id,
+        .index = last_expand.byte_offset,
+        .splice_locs = &.{},
+    };
+    const name_tok = tokenizer.next();
+    if (!name_tok.id.isMacroIdentifier()) return null;
+
+    const name = t.pp.tokSlice(name_tok);
+    if (t.global_scope.containsNow(name)) return null;
+    const macro = t.pp.defines.get(name) orelse return null;
+    if (macro.is_func) return null;
+    if (macro.isBuiltin()) return null;
+
+    var tok_count: u8 = 0;
+    for (macro.tokens) |macro_tok| {
+        switch (macro_tok.id) {
+            .invalid => continue,
+            .whitespace => continue,
+            .comment => continue,
+            .macro_ws => continue,
+            else => {
+                if (tok_count != 0) return null;
+                tok_count += 1;
+            },
+        }
+    }
+
+    if (t.checkTranslatableMacro(macro.tokens, macro.params) != null) return null;
+
+    const ident = try ZigTag.identifier.create(t.arena, name);
+    return try t.maybeSuppressResult(used, ident);
+}
+
 fn transIntLiteral(
     t: *Translator,
     scope: *Scope,
@@ -3379,6 +3439,7 @@ fn transIntLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const int_lit_node = try t.createIntNode(val);
     if (suppress_as == .no_as) {
@@ -3405,6 +3466,7 @@ fn transCharLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const char_literal = literal_index.get(t.tree).char_literal;
     const narrow = char_literal.kind == .ascii or char_literal.kind == .utf8;
@@ -3437,6 +3499,7 @@ fn transFloatLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const float_literal = literal_index.get(t.tree).float_literal;
 
