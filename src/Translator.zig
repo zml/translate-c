@@ -76,6 +76,8 @@ pp: *const aro.Preprocessor,
 pub_static: bool,
 /// Should function bodies be translated.
 func_bodies: bool,
+/// Should macro names of literals be preserved.
+keep_macro_literals: bool,
 
 gpa: mem.Allocator,
 arena: mem.Allocator,
@@ -224,6 +226,7 @@ pub const Options = struct {
     module_libs: bool,
     pub_static: bool,
     func_bodies: bool,
+    keep_macro_literals: bool,
 };
 
 pub fn translate(options: Options) mem.Allocator.Error![]u8 {
@@ -242,6 +245,7 @@ pub fn translate(options: Options) mem.Allocator.Error![]u8 {
         .tree = options.tree,
         .pub_static = options.pub_static,
         .func_bodies = options.func_bodies,
+        .keep_macro_literals = options.keep_macro_literals,
     };
     translator.global_scope.* = Scope.Root.init(&translator);
     defer {
@@ -3378,6 +3382,51 @@ fn transCall(
 
 const SuppressCast = enum { with_as, no_as };
 
+/// Attempt to translate literal as the name of the simple macro
+/// it was expanded from.
+fn checkLiteralMacro(t: *Translator, tok: TokenIndex, used: ResultUsed) !?ZigNode {
+    if (!t.keep_macro_literals) return null;
+    const expansion_locs = t.pp.expansionSlice(tok);
+    if (expansion_locs.len == 0) return null;
+
+    const last_expand = expansion_locs[0];
+    const source = t.comp.getSource(last_expand.id);
+    var tokenizer: aro.Tokenizer = .{
+        .buf = source.buf,
+        .langopts = t.comp.langopts,
+        .source = last_expand.id,
+        .index = last_expand.byte_offset,
+        .splice_locs = &.{},
+    };
+    const name_tok = tokenizer.next();
+    if (!name_tok.id.isMacroIdentifier()) return null;
+
+    const name = t.pp.tokSlice(name_tok);
+    if (t.global_scope.containsNow(name)) return null;
+    const macro = t.pp.defines.get(name) orelse return null;
+    if (macro.is_func) return null;
+    if (macro.isBuiltin()) return null;
+
+    var tok_count: u8 = 0;
+    for (macro.tokens) |macro_tok| {
+        switch (macro_tok.id) {
+            .invalid => continue,
+            .whitespace => continue,
+            .comment => continue,
+            .macro_ws => continue,
+            else => {
+                if (tok_count != 0) return null;
+                tok_count += 1;
+            },
+        }
+    }
+
+    if (t.checkTranslatableMacro(macro.tokens, macro.params) != null) return null;
+
+    const ident = try ZigTag.identifier.create(t.arena, name);
+    return try t.maybeSuppressResult(used, ident);
+}
+
 fn transIntLiteral(
     t: *Translator,
     scope: *Scope,
@@ -3385,6 +3434,7 @@ fn transIntLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const int_lit_node = try t.createIntNode(val);
     if (suppress_as == .no_as) {
@@ -3411,6 +3461,7 @@ fn transCharLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const char_literal = literal_index.get(t.tree).char_literal;
     const narrow = char_literal.kind == .ascii or char_literal.kind == .utf8;
@@ -3443,6 +3494,7 @@ fn transFloatLiteral(
     used: ResultUsed,
     suppress_as: SuppressCast,
 ) TransError!ZigNode {
+    if (try t.checkLiteralMacro(literal_index.tok(t.tree), used)) |node| return node;
     const val = t.tree.value_map.get(literal_index).?;
     const float_literal = literal_index.get(t.tree).float_literal;
 
