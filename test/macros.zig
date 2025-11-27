@@ -174,3 +174,8 @@ test "Blank macros" {
     try expect(@TypeOf(macros.BLANK_MACRO_CAST) == macros.def_type);
     try expectEqual(macros.BLANK_MACRO_CAST, @as(c_long, 0));
 }
+
+test "condexpr macro" {
+    try expectEqual(@as(c_int, 0), macros.CONDEXPR_MACRO(0));
+    try expectEqual(@as(c_int, 1), macros.CONDEXPR_MACRO(42));
+}

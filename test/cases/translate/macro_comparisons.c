@@ -3,14 +3,14 @@
 
 // translate
 //
-// pub inline fn MIN(a: anytype, b: anytype) @TypeOf(if (b < a) b else a) {
+// pub inline fn MIN(a: anytype, b: anytype) @TypeOf(if (__helpers.cast(bool, b < a)) b else a) {
 //     _ = &a;
 //     _ = &b;
-//     return if (b < a) b else a;
+//     return if (__helpers.cast(bool, b < a)) b else a;
 // }
 //
-// pub inline fn MAX(a: anytype, b: anytype) @TypeOf(if (b > a) b else a) {
+// pub inline fn MAX(a: anytype, b: anytype) @TypeOf(if (__helpers.cast(bool, b > a)) b else a) {
 //     _ = &a;
 //     _ = &b;
-//     return if (b > a) b else a;
+//     return if (__helpers.cast(bool, b > a)) b else a;
 // }

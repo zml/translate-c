@@ -3,6 +3,6 @@
 
 // translate
 //
-// pub inline fn FOO() @TypeOf(if (a) b else c) {
-//     return if (a) b else c;
+// pub inline fn FOO() @TypeOf(if (__helpers.cast(bool, a)) b else c) {
+//     return if (__helpers.cast(bool, a)) b else c;
 // }

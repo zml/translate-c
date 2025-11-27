@@ -87,3 +87,10 @@ int U_SUFFIX;
 int UL_SUFFIX;
 int ULL_SUFFIX;
 int WL_CONTAINER_OF;
+
+static int check(int x) {
+    return x;
+}
+
+#define CONDEXPR_MACRO(x) \
+    (check(x) ? 1 : 0)

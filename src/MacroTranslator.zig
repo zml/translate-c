@@ -681,8 +681,10 @@ fn macroIntToBool(mt: *MacroTranslator, node: ZigNode) !ZigNode {
 }
 
 fn parseCCondExpr(mt: *MacroTranslator, scope: *Scope) ParseError!ZigNode {
-    const node = try mt.parseCOrExpr(scope);
-    if (!mt.eat(.question_mark)) return node;
+    const condition = try mt.parseCOrExpr(scope);
+    if (!mt.eat(.question_mark)) return condition;
+    const bool_ty = try ZigTag.type.create(mt.t.arena, "bool");
+    const node = try mt.t.createHelperCallNode(.cast, &.{ bool_ty, condition });
 
     const then_body = try mt.parseCOrExpr(scope);
     try mt.expect(.colon);
