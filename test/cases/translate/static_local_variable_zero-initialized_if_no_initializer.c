@@ -5,6 +5,7 @@ int bar(void) {
 }
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_FOO = extern struct {
 //     x: c_int = 0,

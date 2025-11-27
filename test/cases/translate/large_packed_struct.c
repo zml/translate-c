@@ -8,6 +8,7 @@ struct __attribute__((packed)) bar {
 };
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_bar = extern struct {
 //     a: c_short align(1) = 0,

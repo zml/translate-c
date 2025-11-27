@@ -16,6 +16,7 @@ void foo() {
 }
 
 // translate
+// args = -fdefault-init
 //
 // pub export fn foo() void {
 //     const struct_Foo = extern struct {

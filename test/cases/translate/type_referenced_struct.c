@@ -9,6 +9,7 @@ struct Foo {
 
 // translate
 // target=x86_64-linux-gnu
+// args = -fdefault-init
 //
 // pub const struct_Bar_1 = extern struct {
 //     b: c_int = 0,

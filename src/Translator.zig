@@ -72,12 +72,15 @@ tree: *const Tree,
 comp: *aro.Compilation,
 /// The Preprocessor that produced the source for `tree`.
 pp: *const aro.Preprocessor,
+
 /// Should static functions be translated as `pub`.
 pub_static: bool,
 /// Should function bodies be translated.
 func_bodies: bool,
 /// Should macro names of literals be preserved.
 keep_macro_literals: bool,
+/// Should struct fields be default initialized.
+default_init: bool,
 
 gpa: mem.Allocator,
 arena: mem.Allocator,
@@ -227,6 +230,7 @@ pub const Options = struct {
     pub_static: bool,
     func_bodies: bool,
     keep_macro_literals: bool,
+    default_init: bool,
 };
 
 pub fn translate(options: Options) mem.Allocator.Error![]u8 {
@@ -246,6 +250,7 @@ pub fn translate(options: Options) mem.Allocator.Error![]u8 {
         .pub_static = options.pub_static,
         .func_bodies = options.func_bodies,
         .keep_macro_literals = options.keep_macro_literals,
+        .default_init = options.default_init,
     };
     translator.global_scope.* = Scope.Root.init(&translator);
     defer {
@@ -665,7 +670,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
             // C99 introduced designated initializers for structs. Omitted fields are implicitly
             // initialized to zero. Some C APIs are designed with this in mind. Defaulting to zero
             // values for translated struct fields permits Zig code to comfortably use such an API.
-            const default_value = if (container_kind == .@"struct")
+            const default_value = if (t.default_init and container_kind == .@"struct")
                 try t.createZeroValueNode(field.qt, field_type, .no_as)
             else
                 null;
@@ -690,7 +695,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                 .name = "_padding",
                 .type = try ZigTag.type.create(t.arena, try std.fmt.allocPrint(t.arena, "u{d}", .{padding_bits})),
                 .alignment = @divExact(alignment_bits, 8),
-                .default_value = if (container_kind == .@"struct")
+                .default_value = if (t.default_init and container_kind == .@"struct")
                     ZigTag.zero_literal.init()
                 else
                     null,

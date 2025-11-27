@@ -19,6 +19,7 @@ struct Foo {
 
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_A = extern struct {
 //     x: c_short = 0,

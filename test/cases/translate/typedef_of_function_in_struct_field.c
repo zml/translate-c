@@ -5,6 +5,7 @@ struct Foo {
 };
 
 // translate
+// args = -fdefault-init
 //
 // pub const lws_callback_function = fn () callconv(.c) void;
 // pub const struct_Foo = extern struct {

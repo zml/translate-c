@@ -16,6 +16,7 @@ typedef struct { float x; } MyCStruct;
 #define B A(0.f)
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_Color = extern struct {
 //     r: u8 = 0,

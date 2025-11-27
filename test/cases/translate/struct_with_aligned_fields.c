@@ -13,6 +13,7 @@ struct over_aligned_array_padding {
 };
 
 // translate
+// args = -fdefault-init
 // 
 // pub const struct_foo = extern struct {
 //     bar: c_short align(4) = 0,

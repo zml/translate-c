@@ -63,6 +63,12 @@ pub fn lowerCases(
                 .target = case_target,
                 .optimize = optimize,
             });
+            if (case.args) |args| {
+                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
+                while (arg_it.next()) |arg| {
+                    translator.run.addArg(arg);
+                }
+            }
             switch (case.kind) {
                 .translate => |output| {
                     const check_file = b.addCheckFile(translator.output_file, .{ .expected_matches = output });
@@ -87,6 +93,7 @@ const Case = struct {
     /// This is an override; usually `null`.
     target: ?std.Build.ResolvedTarget,
     input: []const u8,
+    args: ?[]const u8,
     kind: Kind,
     skip_windows: bool,
     skip_vector_index: bool,
@@ -125,6 +132,7 @@ fn caseFromFile(b: *std.Build, entry: std.fs.Dir.Walker.Entry) !Case {
     var target: ?std.Target.Query = null;
     var skip_windows = false;
     var skip_vector_index = false;
+    var args: ?[]const u8 = null;
 
     var it = std.mem.tokenizeScalar(u8, manifest, '\n');
 
@@ -142,15 +150,20 @@ fn caseFromFile(b: *std.Build, entry: std.fs.Dir.Walker.Entry) !Case {
 
         if (trimmed.len == 0) break; // Start of trailing data.
 
-        var kv_it = std.mem.splitScalar(u8, trimmed, '=');
-        const key = kv_it.first();
-        const value = kv_it.next() orelse return error.MissingValuesForConfig;
+        const key_raw, const value_raw = std.mem.cutScalar(u8, trimmed, '=') orelse {
+            std.debug.print("{s}: missing value for config option: {s}\n", .{ entry.basename, trimmed });
+            return error.TestManifestMissingValue;
+        };
+        const key = std.mem.trimEnd(u8, key_raw, " \t");
+        const value = std.mem.trimStart(u8, value_raw, " \t");
         if (std.mem.eql(u8, key, "target")) {
             target = try .parse(.{ .arch_os_abi = value });
         } else if (std.mem.eql(u8, key, "skip_windows")) {
             skip_windows = std.mem.eql(u8, value, "true");
         } else if (std.mem.eql(u8, key, "skip_vector_index")) {
             skip_vector_index = std.mem.eql(u8, value, "true");
+        } else if (std.mem.eql(u8, key, "args")) {
+            args = value;
         } else return error.InvalidTestConfigOption;
     }
 
@@ -164,6 +177,7 @@ fn caseFromFile(b: *std.Build, entry: std.fs.Dir.Walker.Entry) !Case {
         },
         .skip_windows = skip_windows,
         .skip_vector_index = skip_vector_index,
+        .args = args,
     };
 }
 

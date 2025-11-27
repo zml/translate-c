@@ -9,6 +9,7 @@ struct Bar {
 };
 
 // translate
+// args = -fdefault-init
 //
 // pub const struct_Bar = extern struct {
 //     next: [*c]struct_Foo = null,

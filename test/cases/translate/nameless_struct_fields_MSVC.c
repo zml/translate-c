@@ -11,6 +11,7 @@ typedef struct ONENAMEWITHSTRUCT
 
 // translate
 // target=native-windows-msvc
+// args = -fdefault-init
 //
 // pub const struct_NAMED = extern struct {
 //     name: c_long = 0,
