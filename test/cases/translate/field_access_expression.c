@@ -9,7 +9,7 @@ void foo(void) {
     a.b;
     c->b;
 }
-#define invalid(a, name) (a.name)
+#define macro(a, name) (a.name)
 
 // translate
 //
@@ -35,4 +35,8 @@ void foo(void) {
 //     return a.b;
 // }
 //
-// pub const invalid = @compileError("unable to translate C expr: field access using macro parameter");
+// pub inline fn macro(a_1: anytype, name: anytype) @TypeOf(@field(a_1, name)) {
+//     _ = &a_1;
+//     _ = &name;
+//     return @field(a_1, name);
+// }

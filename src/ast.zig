@@ -50,6 +50,7 @@ pub const Node = extern union {
         break_val,
         @"return",
         field_access,
+        field_builtin,
         array_access,
         call,
         var_decl,
@@ -371,6 +372,7 @@ pub const Node = extern union {
                 .div_exact,
                 .offset_of,
                 .static_assert,
+                .field_builtin,
                 => Payload.BinOp,
 
                 .integer_literal,
@@ -2015,6 +2017,10 @@ fn renderNode(c: *Context, node: Node) Allocator.Error!NodeIndex {
             const lhs = try renderNodeGrouped(c, payload.lhs);
             return renderFieldAccess(c, lhs, payload.field_name);
         },
+        .field_builtin => {
+            const payload = node.castTag(.field_builtin).?.data;
+            return renderBuiltinCall(c, "@field", &.{ payload.lhs, payload.rhs });
+        },
         .@"struct", .@"union", .@"opaque" => return renderContainer(c, node),
         .enum_constant => {
             const payload = node.castTag(.enum_constant).?.data;
@@ -2532,6 +2538,7 @@ fn renderNodeGrouped(c: *Context, node: Node) !NodeIndex {
         .trunc,
         .floor,
         .root_ref,
+        .field_builtin,
         => {
             // no grouping needed
             return renderNode(c, node);

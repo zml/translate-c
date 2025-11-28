@@ -1165,8 +1165,13 @@ fn parseCPostfixExprInner(mt: *MacroTranslator, scope: *Scope, type_name: ?ZigNo
                 mt.i += 1;
                 const tok = mt.tokens[mt.i];
                 if (tok.id == .macro_param or tok.id == .macro_param_no_expand) {
-                    try mt.fail("unable to translate C expr: field access using macro parameter", .{});
-                    return error.ParseError;
+                    const param = mt.macro.params[tok.end];
+                    mt.i += 1;
+
+                    const mangled_name = scope.getAlias(param) orelse param;
+                    const field_name = try ZigTag.identifier.create(arena, mangled_name);
+                    node = try ZigTag.field_builtin.create(arena, .{ .lhs = node, .rhs = field_name });
+                    continue;
                 }
                 const field_name = mt.tokSlice();
                 try mt.expect(.identifier);
@@ -1177,8 +1182,13 @@ fn parseCPostfixExprInner(mt: *MacroTranslator, scope: *Scope, type_name: ?ZigNo
                 mt.i += 1;
                 const tok = mt.tokens[mt.i];
                 if (tok.id == .macro_param or tok.id == .macro_param_no_expand) {
-                    try mt.fail("unable to translate C expr: field access using macro parameter", .{});
-                    return error.ParseError;
+                    const param = mt.macro.params[tok.end];
+                    mt.i += 1;
+
+                    const mangled_name = scope.getAlias(param) orelse param;
+                    const field_name = try ZigTag.identifier.create(arena, mangled_name);
+                    node = try ZigTag.field_builtin.create(arena, .{ .lhs = node, .rhs = field_name });
+                    continue;
                 }
                 const field_name = mt.tokSlice();
                 try mt.expect(.identifier);
