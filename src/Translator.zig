@@ -914,11 +914,7 @@ fn transVarDecl(t: *Translator, scope: *Scope, variable: Node.Variable, decl_nod
                 else => |e| return e,
             };
 
-            if (!variable.qt.is(t.comp, .bool) and init_node.isBoolRes()) {
-                break :init try ZigTag.int_from_bool.create(t.arena, init_node);
-            } else {
-                break :init init_node;
-            }
+            break :init try t.toNonBool(init_node, variable.qt);
         }
         if (variable.storage_class == .@"extern") {
             if (array_ty != null and array_ty.?.len == .incomplete) {
@@ -981,18 +977,18 @@ fn transVarDecl(t: *Translator, scope: *Scope, variable: Node.Variable, decl_nod
         }
         try scope.appendNode(node);
         if (self_referential) {
-            var deferred_init = t.transExprCoercing(scope, variable.initializer.?, .used) catch |err| switch (err) {
+            const deferred_init = t.transExprCoercing(scope, variable.initializer.?, .used) catch |err| switch (err) {
                 error.SelfReferential => unreachable,
                 error.UnsupportedTranslation, error.UnsupportedType => {
                     return t.failDecl(scope, variable.name_tok, name, "unable to resolve var init expr", .{});
                 },
                 else => |e| return e,
             };
-            if (!variable.qt.is(t.comp, .bool) and deferred_init.isBoolRes()) {
-                deferred_init = try ZigTag.int_from_bool.create(t.arena, deferred_init);
-            }
-            const varname = try ZigTag.identifier.create(t.arena, name);
-            const assign = try ZigTag.assign.create(t.arena, .{ .lhs = varname, .rhs = deferred_init });
+
+            const assign = try ZigTag.assign.create(t.arena, .{
+                .lhs = try ZigTag.identifier.create(t.arena, name),
+                .rhs = try t.toNonBool(deferred_init, variable.qt),
+            });
             try scope.appendNode(assign);
         }
         try bs.discardVariable(name);
@@ -1679,12 +1675,9 @@ fn transReturnStmt(t: *Translator, scope: *Scope, return_stmt: Node.ReturnStmt) 
     switch (return_stmt.operand) {
         .none => return ZigTag.return_void.init(),
         .expr => |operand| {
-            var rhs = try t.transExprCoercing(scope, operand, .used);
+            const rhs = try t.transExprCoercing(scope, operand, .used);
             const return_qt = scope.findBlockReturnType();
-            if (rhs.isBoolRes() and !return_qt.is(t.comp, .bool)) {
-                rhs = try ZigTag.int_from_bool.create(t.arena, rhs);
-            }
-            return ZigTag.@"return".create(t.arena, rhs);
+            return ZigTag.@"return".create(t.arena, try t.toNonBool(rhs, return_qt));
         },
         .implicit => |zero| {
             if (zero) return ZigTag.@"return".create(t.arena, ZigTag.zero_literal.init());
@@ -2392,6 +2385,12 @@ fn transBoolExpr(t: *Translator, scope: *Scope, expr: Node.Index) TransError!Zig
     return t.finishBoolExpr(expr.qt(t.tree), maybe_bool_res);
 }
 
+fn toNonBool(t: *Translator, node: ZigNode, qt: QualType) Error!ZigNode {
+    if (!node.isBoolRes()) return node;
+    if (qt.is(t.comp, .bool)) return node;
+    return ZigTag.int_from_bool.create(t.arena, node);
+}
+
 fn finishBoolExpr(t: *Translator, qt: QualType, node: ZigNode) TransError!ZigNode {
     const sk = qt.scalarKind(t.comp);
     if (sk == .bool) return node;
@@ -2501,6 +2500,8 @@ fn transCastExpr(
                     .lhs = try ZigTag.type.create(t.arena, "usize"),
                     .rhs = try ZigTag.int_cast.create(t.arena, sub_expr_node),
                 });
+            } else if (sub_expr_node.isBoolRes()) {
+                sub_expr_node = try ZigTag.int_from_bool.create(t.arena, sub_expr_node);
             }
             break :int_to_pointer try ZigTag.ptr_from_int.create(t.arena, sub_expr_node);
         },
@@ -2859,7 +2860,7 @@ fn transCommaExpr(t: *Translator, scope: *Scope, bin: Node.Binary, used: ResultU
     const rhs = try t.transExprCoercing(&block_scope.base, bin.rhs, .used);
     const break_node = try ZigTag.break_val.create(t.arena, .{
         .label = block_scope.label,
-        .val = rhs,
+        .val = try t.toNonBool(rhs, bin.qt),
     });
     try block_scope.statements.append(t.gpa, break_node);
 
@@ -2869,14 +2870,10 @@ fn transCommaExpr(t: *Translator, scope: *Scope, bin: Node.Binary, used: ResultU
 fn transAssignExpr(t: *Translator, scope: *Scope, bin: Node.Binary, used: ResultUsed) !ZigNode {
     if (used == .unused) {
         const lhs = try t.transExpr(scope, bin.lhs, .used);
-        var rhs = try t.transExprCoercing(scope, bin.rhs, .used);
+        const rhs = try t.transExprCoercing(scope, bin.rhs, .used);
 
         const lhs_qt = bin.lhs.qt(t.tree);
-        if (rhs.isBoolRes() and !lhs_qt.is(t.comp, .bool)) {
-            rhs = try ZigTag.int_from_bool.create(t.arena, rhs);
-        }
-
-        return t.createBinOpNode(.assign, lhs, rhs);
+        return t.createBinOpNode(.assign, lhs, try t.toNonBool(rhs, lhs_qt));
     }
 
     var block_scope = try Scope.Block.init(t, scope, true);
@@ -2884,13 +2881,12 @@ fn transAssignExpr(t: *Translator, scope: *Scope, bin: Node.Binary, used: Result
 
     const tmp = try block_scope.reserveMangledName("tmp");
 
-    var rhs = try t.transExpr(&block_scope.base, bin.rhs, .used);
+    const rhs = try t.transExpr(&block_scope.base, bin.rhs, .used);
     const lhs_qt = bin.lhs.qt(t.tree);
-    if (rhs.isBoolRes() and !lhs_qt.is(t.comp, .bool)) {
-        rhs = try ZigTag.int_from_bool.create(t.arena, rhs);
-    }
-
-    const tmp_decl = try ZigTag.var_simple.create(t.arena, .{ .name = tmp, .init = rhs });
+    const tmp_decl = try ZigTag.var_simple.create(t.arena, .{
+        .name = tmp,
+        .init = try t.toNonBool(rhs, lhs_qt),
+    });
     try block_scope.statements.append(t.gpa, tmp_decl);
 
     const lhs = try t.transExprCoercing(&block_scope.base, bin.lhs, .used);
