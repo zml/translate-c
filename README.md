@@ -7,7 +7,7 @@ A Zig package for translating C code into Zig code, intended to replace `@cImpor
 Add `translate-c` to your `build.zig.zon` with this command:
 
 ```sh-session
-$ zig fetch --save git+https://github.com/ziglang/translate-c
+$ zig fetch --save git+https://codeberg.org/ziglang/translate-c
 info: resolved to commit 1aa9ec052415feeaa0494190ae35a94849a24399
 ```
 
