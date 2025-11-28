@@ -1574,7 +1574,7 @@ fn typeIsOpaque(t: *Translator, qt: QualType) bool {
 }
 
 fn typeWasDemotedToOpaque(t: *Translator, qt: QualType) bool {
-    return t.opaque_demotes.contains(qt);
+    return t.opaque_demotes.contains(qt.base(t.comp).qt);
 }
 
 fn typeHasWrappingOverflow(t: *Translator, qt: QualType) bool {
