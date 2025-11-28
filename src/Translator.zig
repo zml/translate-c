@@ -2103,7 +2103,14 @@ fn transExpr(t: *Translator, scope: *Scope, expr: Node.Index, used: ResultUsed) 
             break :res try ZigTag.deref.create(t.arena, try t.transExpr(scope, deref_expr.operand, .used));
         },
         .bool_not_expr => |bool_not_expr| try ZigTag.not.create(t.arena, try t.transBoolExpr(scope, bool_not_expr.operand)),
-        .bit_not_expr => |bit_not_expr| try ZigTag.bit_not.create(t.arena, try t.transExpr(scope, bit_not_expr.operand, .used)),
+        .bit_not_expr => |bit_not_expr| try ZigTag.bit_not.create(t.arena, op: {
+            const operand = try t.transExpr(scope, bit_not_expr.operand, .used);
+            if (!operand.isBoolRes()) break :op operand;
+
+            const casted = try ZigTag.int_from_bool.create(t.arena, operand);
+            const ty = try t.transType(scope, bit_not_expr.qt, bit_not_expr.op_tok);
+            break :op try ZigTag.as.create(t.arena, .{ .lhs = ty, .rhs = casted });
+        }),
         .plus_expr => |plus_expr| return t.transExpr(scope, plus_expr.operand, used),
         .negate_expr => |negate_expr| res: {
             const operand_qt = negate_expr.operand.qt(t.tree);
