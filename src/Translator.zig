@@ -3746,7 +3746,7 @@ fn transArrayInit(
                 while (i < array_init.items.len) : (i += 1) {
                     if (array_init.items[i].get(t.tree) == .array_filler_expr) break;
                     const expr = try t.transExprCoercing(scope, array_init.items[i], .used);
-                    try val_list.append(t.gpa, expr);
+                    try val_list.append(t.gpa, try t.toNonBool(expr, array_item_qt));
                 }
                 const array_type = try ZigTag.array_type.create(t.arena, .{
                     .elem_type = array_item_type,
@@ -3796,7 +3796,7 @@ fn transUnionInit(
     const field_init = try t.arena.create(ast.Payload.ContainerInit.Initializer);
     field_init.* = .{
         .name = field_name,
-        .value = try t.transExprCoercing(scope, init_expr, .used),
+        .value = try t.toNonBool(try t.transExprCoercing(scope, init_expr, .used), field.qt),
     };
     const container_init = try ZigTag.container_init.create(t.arena, .{
         .lhs = union_type,
@@ -3827,7 +3827,7 @@ fn transStructInit(
         }).? else field.name.lookup(t.comp);
         init.* = .{
             .name = field_name,
-            .value = try t.transExprCoercing(scope, field_expr, .used),
+            .value = try t.toNonBool(try t.transExprCoercing(scope, field_expr, .used), field.qt),
         };
     }
 
