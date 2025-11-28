@@ -1267,7 +1267,19 @@ fn transType(t: *Translator, scope: *Scope, qt: QualType, source_loc: TokenIndex
             return ZigTag.identifier.create(t.arena, name);
         },
         .attributed => |attributed_ty| continue :loop attributed_ty.base.type(t.comp),
-        .typeof => |typeof_ty| continue :loop typeof_ty.base.type(t.comp),
+        .typeof => |typeof_ty| {
+            if (typeof_ty.expr) |expr| {
+                if (t.transExpr(scope, expr, .used)) |node| {
+                    return ZigTag.typeof.create(t.arena, node);
+                } else |err| switch (err) {
+                    error.SelfReferential => {},
+                    error.UnsupportedTranslation => {},
+                    error.UnsupportedType => {},
+                    error.OutOfMemory => return error.OutOfMemory,
+                }
+            }
+            continue :loop typeof_ty.base.type(t.comp);
+        },
         .vector => |vector_ty| {
             const len = try t.createNumberNode(vector_ty.len, .int);
             const elem_type = try t.transType(scope, vector_ty.elem, source_loc);
