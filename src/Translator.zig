@@ -423,15 +423,26 @@ fn transDecl(t: *Translator, scope: *Scope, decl: Node.Index) !void {
             try t.transRecordDecl(scope, record_decl.container_qt);
         },
 
+        .struct_forward_decl, .union_forward_decl => |record_decl| {
+            if (record_decl.definition) |some| {
+                return t.transDecl(scope, some);
+            }
+            try t.transRecordDecl(scope, record_decl.container_qt);
+        },
+
         .enum_decl => |enum_decl| {
+            try t.transEnumDecl(scope, enum_decl.container_qt);
+        },
+
+        .enum_forward_decl => |enum_decl| {
+            if (enum_decl.definition) |some| {
+                return t.transDecl(scope, some);
+            }
             try t.transEnumDecl(scope, enum_decl.container_qt);
         },
 
         .enum_field,
         .record_field,
-        .struct_forward_decl,
-        .union_forward_decl,
-        .enum_forward_decl,
         => return,
 
         .function => |function| {
@@ -1637,7 +1648,21 @@ fn transStmt(t: *Translator, scope: *Scope, stmt: Node.Index) TransError!ZigNode
             try t.transRecordDecl(scope, record_decl.container_qt);
             return ZigTag.declaration.init();
         },
+        .struct_forward_decl, .union_forward_decl => |record_decl| {
+            if (record_decl.definition) |some| {
+                return t.transStmt(scope, some);
+            }
+            try t.transRecordDecl(scope, record_decl.container_qt);
+            return ZigTag.declaration.init();
+        },
         .enum_decl => |enum_decl| {
+            try t.transEnumDecl(scope, enum_decl.container_qt);
+            return ZigTag.declaration.init();
+        },
+        .enum_forward_decl => |enum_decl| {
+            if (enum_decl.definition) |some| {
+                return t.transStmt(scope, some);
+            }
             try t.transEnumDecl(scope, enum_decl.container_qt);
             return ZigTag.declaration.init();
         },
