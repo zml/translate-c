@@ -8,6 +8,7 @@ const cross_targets: []const []const u8 = &.{
     "aarch64-freebsd",
     "aarch64-linux",
     "aarch64-macos",
+    "aarch64-windows",
     "arm-linux",
 };
 
