@@ -28,6 +28,7 @@ jobs:
       matrix:
         host:
           - aarch64-macos
+          - x86_64-freebsd
           - x86_64-linux
           - x86_64-windows
 
@@ -36,14 +37,20 @@ jobs:
       - ${{ matrix.host }}
 
     steps:
-      - uses: https://codeberg.org/ziglang/checkout@19af6bac491e2534a4687a50ee84fa7f13258d28
+      - name: Checkout
+        uses: https://codeberg.org/ziglang/checkout@19af6bac491e2534a4687a50ee84fa7f13258d28
 
-      - uses: https://codeberg.org/mlugg/setup-zig@main
+      - name: Setup Zig
+        uses: https://codeberg.org/mlugg/setup-zig@main
 
       - name: Build
         run: zig build
 
-      - name: Build 32-bit
+      - name: Build 32-bit FreeBSD
+        if: matrix.host == 'x86_64-freebsd'
+        run: zig build -Dtarget=arm-freebsd
+
+      - name: Build 32-bit Linux
         if: matrix.host == 'x86_64-linux'
         run: zig build -Dtarget=arm-linux
 
