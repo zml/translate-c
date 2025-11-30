@@ -2,8 +2,10 @@ const std = @import("std");
 const Translator = @import("../build/Translator.zig");
 
 const cross_targets: []const []const u8 = &.{
+    "x86_64-freebsd",
     "x86_64-linux",
     "x86_64-windows",
+    "aarch64-freebsd",
     "aarch64-linux",
     "aarch64-macos",
     "arm-linux",
