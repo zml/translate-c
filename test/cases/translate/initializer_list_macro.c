@@ -51,4 +51,4 @@ typedef struct { float x; } MyCStruct;
 //     });
 // }
 //
-// pub const B = A(@as(f32, 0));
+// pub const B = A(@as(f32, 0.0));

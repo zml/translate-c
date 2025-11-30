@@ -266,7 +266,8 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
     const lit_bytes = mt.tokSlice();
     mt.i += 1;
 
-    var bytes = try std.ArrayList(u8).initCapacity(arena, lit_bytes.len + 3);
+    // +3 for prefix and +2 for suffix
+    var bytes = try std.ArrayList(u8).initCapacity(arena, lit_bytes.len + 3 + 2);
 
     const prefix = aro.Tree.Token.NumberPrefix.fromString(lit_bytes);
     switch (prefix) {
@@ -360,6 +361,11 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
                 return error.ParseError;
             },
         });
+        if (bytes.getLast() == '.') {
+            bytes.appendAssumeCapacity('0');
+        } else if (mem.findAny(u8, bytes.items, ".eEpP") == null) {
+            bytes.appendSliceAssumeCapacity(".0");
+        }
         const rhs = try ZigTag.float_literal.create(arena, bytes.items);
         return ZigTag.as.create(arena, .{ .lhs = type_node, .rhs = rhs });
     } else {

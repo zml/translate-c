@@ -24,12 +24,12 @@ extern const long double my_extended_precision_longdouble = 1.0000000000000003l;
 //
 // pub const BAZ = @as(f32, 42e-3);
 //
-// pub const foobar = -@as(c_longdouble, 73);
+// pub const foobar = -@as(c_longdouble, 73.0);
 //
-// pub export const my_float: f32 = 1;
+// pub export const my_float: f32 = 1.0;
 //
-// pub export const my_double: f64 = 1;
+// pub export const my_double: f64 = 1.0;
 //
-// pub export const my_longdouble: c_longdouble = 1;
+// pub export const my_longdouble: c_longdouble = 1.0;
 //
 // pub export const my_extended_precision_longdouble: c_longdouble = 1.0000000000000002;

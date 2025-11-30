@@ -17,7 +17,7 @@ void foo(void) {
 //     b: c_int,
 // };
 // pub extern var a: struct_Foo;
-// pub export var b: f32 = 2;
+// pub export var b: f32 = 2.0;
 // pub export fn foo() void {
 //     var c: [*c]struct_Foo = undefined;
 //     _ = &c;

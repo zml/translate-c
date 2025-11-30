@@ -1292,7 +1292,7 @@ fn transType(t: *Translator, scope: *Scope, qt: QualType, source_loc: TokenIndex
             continue :loop typeof_ty.base.type(t.comp);
         },
         .vector => |vector_ty| {
-            const len = try t.createNumberNode(vector_ty.len, .int);
+            const len = try t.createNumberNode(vector_ty.len);
             const elem_type = try t.transType(scope, vector_ty.elem, source_loc);
             return ZigTag.vector.create(t.arena, .{ .lhs = len, .rhs = elem_type });
         },
@@ -3515,7 +3515,7 @@ fn transCharLiteral(
     // e.g. 'abcd'
     const int_value = val.toInt(u32, t.comp).?;
     const int_lit_node = if (char_literal.kind == .ascii and int_value > 255)
-        try t.createNumberNode(int_value, .int)
+        try t.createNumberNode(int_value)
     else
         try t.createCharLiteralNode(narrow, int_value);
 
@@ -3546,6 +3546,9 @@ fn transFloatLiteral(
     var allocating: std.Io.Writer.Allocating = .init(t.gpa);
     defer allocating.deinit();
     _ = val.print(float_literal.qt, t.comp, &allocating.writer) catch return error.OutOfMemory;
+    if (mem.findScalar(u8, allocating.written(), '.') == null) {
+        allocating.writer.writeAll(".0") catch return error.OutOfMemory;
+    }
 
     const float_lit_node = try ZigTag.float_literal.create(t.arena, try t.arena.dupe(u8, allocating.written()));
     if (suppress_as == .no_as) {
@@ -3949,7 +3952,7 @@ fn transConvertvectorExpr(
     for (items, 0..dest_vec_ty.len) |*item, i| {
         const value = try ZigTag.array_access.create(t.arena, .{
             .lhs = tmp_ident,
-            .rhs = try t.createNumberNode(i, .int),
+            .rhs = try t.createNumberNode(i),
         });
 
         if (src_elem_sk == .float and dest_elem_sk == .float) {
@@ -3995,7 +3998,7 @@ fn transShufflevectorExpr(
         const mask_len = shufflevector.indexes.len;
 
         const mask_type = try ZigTag.vector.create(t.arena, .{
-            .lhs = try t.createNumberNode(mask_len, .int),
+            .lhs = try t.createNumberNode(mask_len),
             .rhs = try ZigTag.type.create(t.arena, "i32"),
         });
 
@@ -4065,16 +4068,9 @@ fn createIntNode(t: *Translator, int: aro.Value) !ZigNode {
     return res;
 }
 
-fn createNumberNode(t: *Translator, num: anytype, num_kind: enum { int, float }) !ZigNode {
-    const fmt_s = switch (@typeInfo(@TypeOf(num))) {
-        .int, .comptime_int => "{d}",
-        else => "{s}",
-    };
-    const str = try std.fmt.allocPrint(t.arena, fmt_s, .{num});
-    if (num_kind == .float)
-        return ZigTag.float_literal.create(t.arena, str)
-    else
-        return ZigTag.integer_literal.create(t.arena, str);
+fn createNumberNode(t: *Translator, num: anytype) !ZigNode {
+    const str = try std.fmt.allocPrint(t.arena, "{d}", .{num});
+    return ZigTag.integer_literal.create(t.arena, str);
 }
 
 fn createCharLiteralNode(t: *Translator, narrow: bool, val: u32) TransError!ZigNode {
