@@ -15,7 +15,10 @@ pub fn build(b: *std.Build) !void {
         .c_source_file = b.path("header.h"),
         .target = target,
         .optimize = optimize,
+        .default_init = false,
+        .warnings = .@"error",
     });
+    header.run.addArg("-Wno-pragma-once-outside-header");
 
     // Now we'll compile a test which depends on the translated header.
     // To do that, we must create a module for the actual test.

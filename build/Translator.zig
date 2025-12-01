@@ -231,7 +231,7 @@ pub fn defineCMacro(t: *const Translator, name: []const u8, value: ?[]const u8) 
 
 fn addFlag(run: *Build.Step.Run, name: []const u8, opt_value: ?bool) void {
     const value = opt_value orelse return;
-    const prefix = if (value) "-f" else "-fno";
+    const prefix = if (value) "-f" else "-fno-";
     const arg = run.step.owner.fmt("{s}{s}", .{ prefix, name });
     run.addArg(arg);
 }
