@@ -44,29 +44,29 @@ jobs:
         uses: https://codeberg.org/mlugg/setup-zig@main
 
       - name: Build
-        run: zig build
+        run: zig build --maxrss ${{ env.ZSF_MAX_RSS }}
 
       - name: Build 32-bit FreeBSD
         if: matrix.host == 'x86_64-freebsd'
-        run: zig build -Dtarget=arm-freebsd
+        run: zig build --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=arm-freebsd
 
       - name: Build 32-bit Linux
         if: matrix.host == 'x86_64-linux'
-        run: zig build -Dtarget=arm-linux
+        run: zig build --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=arm-linux
 
       - name: Run Tests
         run: |
-          zig build test -Doptimize=Debug
-          zig build test -Doptimize=ReleaseFast
+          zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Doptimize=Debug
+          zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Doptimize=ReleaseFast
 
       - name: Run Tests MSVC
         if: matrix.host == 'x86_64-windows'
         run: |
-          zig build test -Dtarget=native-windows-msvc -Doptimize=Debug
-          zig build test -Dtarget=native-windows-msvc -Doptimize=ReleaseFast
+          zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=native-windows-msvc -Doptimize=Debug
+          zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=native-windows-msvc -Doptimize=ReleaseFast
 
       - name: Run Cross-Translation Tests
-        run: zig build test -Doptimize=Debug -Dtest-cross-targets
+        run: zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Doptimize=Debug -Dtest-cross-targets
 
       - name: Run Examples
-        run: zig build all --build-file examples/build.zig
+        run: zig build all --maxrss ${{ env.ZSF_MAX_RSS }} --build-file examples/build.zig
