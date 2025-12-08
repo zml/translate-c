@@ -29,6 +29,25 @@ typedef struct foo_quux FooQuux;
 int foo_quux_bar1(FooQuux *foo);
 int foo_quux_bar2_(FooQuux *foo);
 
+typedef struct {
+  int value;
+} bval;
+typedef struct {
+  bval *cur;
+} foo_struct;
+
+void foo_struct_set_bval(foo_struct *foo, bval *bv);
+bval *foo_struct_get_bval(foo_struct *foo);
+bval *foo_struct_bval(foo_struct *foo); // skip alias
+bval *some_get_bval_(foo_struct *foo);
+bval *some_get_bval(foo_struct *foo);   // skip alias
+
+struct _point {
+    int x,y;
+};
+typedef struct _point point;
+void point_set_pos(point *p, int x, int y);
+
 // translate
 // args = -fdefault-init
 //
@@ -79,3 +98,30 @@ int foo_quux_bar2_(FooQuux *foo);
 // pub const FooQuux = struct_foo_quux;
 // pub extern fn foo_quux_bar1(foo: ?*FooQuux) c_int;
 // pub extern fn foo_quux_bar2_(foo: ?*FooQuux) c_int;
+// pub const bval = extern struct {
+//     value: c_int = 0,
+// };
+// pub const foo_struct = extern struct {
+//     cur: [*c]bval = null,
+//     pub const foo_struct_set_bval = __root.foo_struct_set_bval;
+//     pub const foo_struct_get_bval = __root.foo_struct_get_bval;
+//     pub const foo_struct_bval = __root.foo_struct_bval;
+//     pub const some_get_bval_ = __root.some_get_bval_;
+//     pub const some_get_bval = __root.some_get_bval;
+//     pub const set_bval = __root.foo_struct_set_bval;
+//     pub const get_bval = __root.foo_struct_get_bval;
+//     pub const bval_ = __root.some_get_bval_;
+// };
+// pub extern fn foo_struct_set_bval(foo: [*c]foo_struct, bv: [*c]bval) void;
+// pub extern fn foo_struct_get_bval(foo: [*c]foo_struct) [*c]bval;
+// pub extern fn foo_struct_bval(foo: [*c]foo_struct) [*c]bval;
+// pub extern fn some_get_bval_(foo: [*c]foo_struct) [*c]bval;
+// pub extern fn some_get_bval(foo: [*c]foo_struct) [*c]bval;
+// pub const struct__point = extern struct {
+//     x: c_int = 0,
+//     y: c_int = 0,
+//     pub const point_set_pos = __root.point_set_pos;
+//     pub const set_pos = __root.point_set_pos;
+// };
+// pub const point = struct__point;
+// pub extern fn point_set_pos(p: [*c]point, x: c_int, y: c_int) void;
