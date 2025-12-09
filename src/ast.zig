@@ -2539,6 +2539,7 @@ fn renderNodeGrouped(c: *Context, node: Node) !NodeIndex {
         .floor,
         .root_ref,
         .field_builtin,
+        .@"switch",
         => {
             // no grouping needed
             return renderNode(c, node);
@@ -2601,7 +2602,6 @@ fn renderNodeGrouped(c: *Context, node: Node) !NodeIndex {
         .pub_var_simple,
         .enum_constant,
         .@"while",
-        .@"switch",
         .@"break",
         .break_val,
         .pub_inline_fn,

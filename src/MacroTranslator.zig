@@ -591,6 +591,7 @@ fn escapeUnprintables(mt: *MacroTranslator) ![]const u8 {
 
 fn parseCPrimaryExpr(mt: *MacroTranslator, scope: *Scope) ParseError!ZigNode {
     const arena = mt.t.arena;
+    const gpa = mt.t.gpa;
     const tok = mt.peek();
     switch (tok) {
         .char_literal,
@@ -654,6 +655,51 @@ fn parseCPrimaryExpr(mt: *MacroTranslator, scope: *Scope) ParseError!ZigNode {
                 if (!var_decl_node.data.is_const) mt.refs_var_decl = true;
             }
             return identifier;
+        },
+        .keyword_generic => {
+            mt.i += 1;
+
+            try mt.expect(.l_paren);
+            const param = try mt.parseCCondExpr(scope);
+            const typeof_param = try ZigTag.typeof.create(arena, param);
+            try mt.expect(.comma);
+
+            var cases: std.ArrayList(ZigNode) = .empty;
+            defer cases.deinit(gpa);
+            var has_default = false;
+            while (true) {
+                const case = if (mt.eat(.keyword_default)) blk: {
+                    has_default = true;
+                    try mt.expect(.colon);
+                    const expr = try mt.parseCCondExpr(scope);
+                    break :blk try ZigTag.switch_else.create(arena, expr);
+                } else blk: {
+                    const case_type = try mt.parseCTypeName(scope) orelse {
+                        try mt.fail("unable to translate C expr: expected type instead got '{s}'", .{mt.peek().symbol()});
+                        return error.ParseError;
+                    };
+                    try mt.expect(.colon);
+                    const expr = try mt.parseCCondExpr(scope);
+                    break :blk try ZigTag.switch_prong.create(arena, .{
+                        .cases = try arena.dupe(ZigNode, &.{case_type}),
+                        .cond = expr,
+                    });
+                };
+                try cases.append(gpa, case);
+                if (!mt.eat(.comma)) break;
+            }
+            try mt.expect(.r_paren);
+
+            if (!has_default) try cases.append(gpa, try ZigTag.switch_else.create(
+                arena,
+                try ZigTag.@"comptime".create(arena, ZigTag.@"unreachable".init()),
+            ));
+
+            const sw = try ZigTag.@"switch".create(arena, .{
+                .cond = typeof_param,
+                .cases = try arena.dupe(ZigNode, cases.items),
+            });
+            return sw;
         },
         else => {},
     }
