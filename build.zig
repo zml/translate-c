@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
         .use_lld = use_llvm,
     });
     if (link_libc) {
-        translate_c_exe.linkLibC();
+        translate_c_exe.root_module.link_libc = true;
     }
 
     b.installDirectory(.{

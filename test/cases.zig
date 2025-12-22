@@ -119,7 +119,7 @@ fn caseFromFile(b: *std.Build, entry: std.fs.Dir.Walker.Entry) !Case {
 
     const input, const manifest = blk: {
         var start: ?usize = null;
-        const bytes = std.mem.trimRight(u8, src, " \t\n");
+        const bytes = std.mem.trimEnd(u8, src, " \t\n");
         var cursor = bytes.len;
         while (true) : (cursor -= 1) {
             while (cursor > 0 and bytes[cursor - 1] != '\n') cursor -= 1;

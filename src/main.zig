@@ -2,7 +2,9 @@ const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
 const process = std.process;
+
 const aro = @import("aro");
+
 const Translator = @import("Translator.zig");
 
 const fast_exit = @import("builtin").mode != .Debug;
@@ -11,7 +13,7 @@ var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
 pub fn main() u8 {
     const gpa = if (@import("builtin").link_libc)
-        std.heap.raw_c_allocator
+        std.heap.c_allocator
     else
         debug_allocator.allocator();
     defer if (!@import("builtin").link_libc) {

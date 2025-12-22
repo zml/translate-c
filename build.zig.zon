@@ -5,12 +5,12 @@
 
     .fingerprint = 0x1c84f6455a54f043, // Changing this has security and trust implications.
 
-    .minimum_zig_version = "0.16.0-dev.1456+16fc083f2",
+    .minimum_zig_version = "0.16.0-dev.1634+b27bdd5af",
 
     .dependencies = .{
         .aro = .{
-            .url = "git+https://github.com/Vexu/arocc#4063dc3ce97c47ee1e9b69c5c27c696fec27ad5c",
-            .hash = "aro-0.0.0-JSD1QgSUNgDy_a8jx-3te5r1ecVLIvOKnscztSfc15IS",
+            .url = "git+https://github.com/Vexu/arocc#3d3542b885a3bbb9d81602447a64d0aa5fd0d30f",
+            .hash = "aro-0.0.0-JSD1Qva-NgD9r2Dt_aKLfwuNUqg93W2BcYpZY_ICu3Ye",
         },
     },
 
