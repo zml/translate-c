@@ -111,6 +111,7 @@ pub const usage =
 
 fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
     const gpa = d.comp.gpa;
+    const io = d.comp.io;
 
     var module_libs = false;
     var pub_static = true;
@@ -225,13 +226,13 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
         const dep_file_name = try d.getDepFileName(source, out_buf[0..std.fs.max_name_bytes]);
 
         const file = if (dep_file_name) |path|
-            d.comp.cwd.createFile(path, .{}) catch |er|
+            d.comp.cwd.createFile(io, path, .{}) catch |er|
                 return d.fatal("unable to create dependency file '{s}': {s}", .{ path, aro.Driver.errorDescription(er) })
         else
-            std.fs.File.stdout();
-        defer if (dep_file_name != null) file.close();
+            std.Io.File.stdout();
+        defer if (dep_file_name != null) file.close(io);
 
-        var file_writer = file.writer(&out_buf);
+        var file_writer = file.writer(io, &out_buf);
         dep_file.write(&file_writer.interface) catch
             return d.fatal("unable to write dependency file: {s}", .{aro.Driver.errorDescription(file_writer.err.?)});
     }
@@ -251,23 +252,23 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
 
     var close_out_file = false;
     var out_file_path: []const u8 = "<stdout>";
-    var out_file: std.fs.File = .stdout();
-    defer if (close_out_file) out_file.close();
+    var out_file: std.Io.File = .stdout();
+    defer if (close_out_file) out_file.close(io);
 
     if (d.output_name) |path| blk: {
         if (std.mem.eql(u8, path, "-")) break :blk;
         if (std.fs.path.dirname(path)) |dirname| {
-            std.fs.cwd().makePath(dirname) catch |err|
+            Io.Dir.cwd().createDirPath(io, dirname) catch |err|
                 return d.fatal("failed to create path to '{s}': {s}", .{ path, aro.Driver.errorDescription(err) });
         }
-        out_file = std.fs.cwd().createFile(path, .{}) catch |err| {
+        out_file = Io.Dir.cwd().createFile(io, path, .{}) catch |err| {
             return d.fatal("failed to create output file '{s}': {s}", .{ path, aro.Driver.errorDescription(err) });
         };
         close_out_file = true;
         out_file_path = path;
     }
 
-    var out_writer = out_file.writer(&out_buf);
+    var out_writer = out_file.writer(io, &out_buf);
     out_writer.interface.writeAll(rendered_zig) catch {};
     out_writer.interface.flush() catch {};
     if (out_writer.err) |write_err|
@@ -284,30 +285,31 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
 
 fn installLibs(d: *aro.Driver, dest_path: ?[]const u8) !void {
     const gpa = d.comp.gpa;
-    const cwd = std.fs.cwd();
+    const io = d.comp.io;
+    const cwd = std.Io.Dir.cwd();
 
-    const self_exe_path = try std.fs.selfExePathAlloc(gpa);
+    const self_exe_path = try std.process.executablePathAlloc(io, gpa);
     defer gpa.free(self_exe_path);
 
     var cur_dir: []const u8 = self_exe_path;
     while (std.fs.path.dirname(cur_dir)) |dirname| : (cur_dir = dirname) {
-        var base_dir = cwd.openDir(dirname, .{}) catch continue;
-        defer base_dir.close();
+        var base_dir = cwd.openDir(io, dirname, .{}) catch continue;
+        defer base_dir.close(io);
 
-        var lib_dir = base_dir.openDir("lib", .{}) catch continue;
-        defer lib_dir.close();
+        var lib_dir = base_dir.openDir(io, "lib", .{}) catch continue;
+        defer lib_dir.close(io);
 
-        lib_dir.access("c_builtins.zig", .{}) catch continue;
+        lib_dir.access(io, "c_builtins.zig", .{}) catch continue;
 
         {
             const install_path = try std.fs.path.join(gpa, &.{ dest_path orelse "", "c_builtins.zig" });
             defer gpa.free(install_path);
-            try lib_dir.copyFile("c_builtins.zig", cwd, install_path, .{});
+            try lib_dir.copyFile("c_builtins.zig", cwd, install_path, io, .{});
         }
         {
             const install_path = try std.fs.path.join(gpa, &.{ dest_path orelse "", "helpers.zig" });
             defer gpa.free(install_path);
-            try lib_dir.copyFile("helpers.zig", cwd, install_path, .{});
+            try lib_dir.copyFile("helpers.zig", cwd, install_path, io, .{});
         }
         return;
     }
