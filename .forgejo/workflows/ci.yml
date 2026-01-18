@@ -34,9 +34,8 @@ jobs:
           - x86_64-linux
           - x86_64-windows
 
-    runs-on:
-      - self-hosted
-      - ${{ matrix.host }}
+    # https://codeberg.org/Codeberg/Community/issues/2320
+    runs-on: ${{ fromJSON(format('["self-hosted", "{0}"]', matrix.host)) }}
 
     steps:
       - name: Checkout
