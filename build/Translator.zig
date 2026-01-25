@@ -129,7 +129,12 @@ pub fn initInner(
     }
 
     if (options.target.query.isNativeOs() and options.target.query.isNativeAbi() and options.link_libc) {
-        const paths = std.zig.system.NativePaths.detect(b.graph.arena, &options.target.result) catch |err| {
+        const paths = std.zig.system.NativePaths.detect(
+            b.graph.arena,
+            b.graph.io,
+            &options.target.result,
+            &b.graph.environ_map,
+        ) catch |err| {
             std.debug.panic("failed to detect native system paths: {t}", .{err});
         };
         for (paths.warnings.items) |warning| {
@@ -261,11 +266,13 @@ fn detectLibCDirs(b: *Build, target: *const Build.ResolvedTarget) std.zig.LibCDi
     if (!gop.found_existing) {
         gop.value_ptr.* = std.zig.LibCDirs.detect(
             b.graph.arena,
+            b.graph.io,
             b.graph.zig_lib_directory.path orelse ".",
             &target.result,
             target.query.isNativeAbi(),
             true,
             null,
+            &b.graph.environ_map,
         ) catch |err| std.debug.panic("failed to locate libc: {s}", .{@errorName(err)});
     }
     return gop.value_ptr.*;

@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
 const process = std.process;
+const Io = std.Io;
 
 const aro = @import("aro");
 
@@ -11,7 +12,7 @@ const fast_exit = @import("builtin").mode != .Debug;
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
-pub fn main() u8 {
+pub fn main(init: process.Init.Minimal) u8 {
     const gpa = if (@import("builtin").link_libc)
         std.heap.c_allocator
     else
@@ -24,26 +25,39 @@ pub fn main() u8 {
     defer arena_instance.deinit();
     const arena = arena_instance.allocator();
 
-    var threaded: std.Io.Threaded = .init(gpa);
+    var threaded: Io.Threaded = .init(gpa, .{
+        .argv0 = .init(init.args),
+        .environ = init.environ,
+    });
     defer threaded.deinit();
     const io = threaded.io();
 
-    const args = process.argsAlloc(arena) catch {
+    const args = init.args.toSlice(arena) catch {
         std.debug.print("ran out of memory allocating arguments\n", .{});
         if (fast_exit) process.exit(1);
         return 1;
     };
 
+    var environ_map = std.process.Environ.createMap(init.environ, gpa) catch |err|
+        std.process.fatal("failed to parse environment variables: {t}", .{err});
+    defer environ_map.deinit();
+
     var stderr_buf: [1024]u8 = undefined;
-    var stderr = std.fs.File.stderr().writer(&stderr_buf);
+    var stderr = Io.File.stderr().writer(io, &stderr_buf);
     var diagnostics: aro.Diagnostics = .{
         .output = .{ .to_writer = .{
-            .color = .detect(stderr.file),
+            .mode = Io.Terminal.Mode.detect(io, stderr.file, false, false) catch .no_color,
             .writer = &stderr.interface,
         } },
     };
 
-    var comp = aro.Compilation.initDefault(gpa, arena, io, &diagnostics, std.fs.cwd()) catch |err| switch (err) {
+    var comp = aro.Compilation.init(.{
+        .gpa = gpa,
+        .arena = arena,
+        .io = io,
+        .diagnostics = &diagnostics,
+        .environ_map = &environ_map,
+    }) catch |err| switch (err) {
         error.OutOfMemory => {
             std.debug.print("ran out of memory initializing C compilation\n", .{});
             if (fast_exit) process.exit(1);
@@ -52,7 +66,7 @@ pub fn main() u8 {
     };
     defer comp.deinit();
 
-    const exe_name = std.fs.selfExePathAlloc(gpa) catch {
+    const exe_name = std.process.executableDirPathAlloc(io, gpa) catch {
         std.debug.print("unable to find translate-c executable path\n", .{});
         if (fast_exit) process.exit(1);
         return 1;
@@ -105,8 +119,9 @@ pub const usage =
     \\
 ;
 
-fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
+fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !void {
     const gpa = d.comp.gpa;
+    const io = d.comp.io;
 
     var module_libs = false;
     var pub_static = true;
@@ -114,56 +129,54 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
     var keep_macro_literals = true;
     var default_init = false;
 
-    const aro_args = args: {
-        var i: usize = 0;
-        for (args) |arg| {
-            args[i] = arg;
-            if (mem.eql(u8, arg, "--help")) {
-                var stdout_buf: [512]u8 = undefined;
-                var stdout = std.fs.File.stdout().writer(&stdout_buf);
-                try stdout.interface.print(usage, .{args[0]});
-                try stdout.interface.flush();
-                return;
-            } else if (mem.eql(u8, arg, "--version")) {
-                var stdout_buf: [512]u8 = undefined;
-                var stdout = std.fs.File.stdout().writer(&stdout_buf);
-                // TODO add version
-                try stdout.interface.writeAll("0.0.0-dev\n");
-                try stdout.interface.flush();
-                return;
-            } else if (mem.eql(u8, arg, "-fmodule-libs")) {
-                module_libs = true;
-            } else if (mem.eql(u8, arg, "-fno-module-libs")) {
-                module_libs = false;
-            } else if (mem.eql(u8, arg, "-fpub-static")) {
-                pub_static = true;
-            } else if (mem.eql(u8, arg, "-fno-pub-static")) {
-                pub_static = false;
-            } else if (mem.eql(u8, arg, "-ffunc-bodies")) {
-                func_bodies = true;
-            } else if (mem.eql(u8, arg, "-fno-func-bodies")) {
-                func_bodies = false;
-            } else if (mem.eql(u8, arg, "-fkeep-macro-literals")) {
-                keep_macro_literals = true;
-            } else if (mem.eql(u8, arg, "-fno-keep-macro-literals")) {
-                keep_macro_literals = false;
-            } else if (mem.eql(u8, arg, "-fdefault-init")) {
-                default_init = true;
-            } else if (mem.eql(u8, arg, "-fno-default-init")) {
-                default_init = false;
-            } else {
-                i += 1;
-            }
+    var aro_args: std.ArrayList([:0]const u8) = try .initCapacity(gpa, args.len);
+    defer aro_args.deinit(gpa);
+
+    for (args) |arg| {
+        if (mem.eql(u8, arg, "--help")) {
+            var stdout_buf: [512]u8 = undefined;
+            var stdout = Io.File.stdout().writer(io, &stdout_buf);
+            try stdout.interface.print(usage, .{args[0]});
+            try stdout.interface.flush();
+            return;
+        } else if (mem.eql(u8, arg, "--version")) {
+            var stdout_buf: [512]u8 = undefined;
+            var stdout = Io.File.stdout().writer(io, &stdout_buf);
+            // TODO add version
+            try stdout.interface.writeAll("0.0.0-dev\n");
+            try stdout.interface.flush();
+            return;
+        } else if (mem.eql(u8, arg, "-fmodule-libs")) {
+            module_libs = true;
+        } else if (mem.eql(u8, arg, "-fno-module-libs")) {
+            module_libs = false;
+        } else if (mem.eql(u8, arg, "-fpub-static")) {
+            pub_static = true;
+        } else if (mem.eql(u8, arg, "-fno-pub-static")) {
+            pub_static = false;
+        } else if (mem.eql(u8, arg, "-ffunc-bodies")) {
+            func_bodies = true;
+        } else if (mem.eql(u8, arg, "-fno-func-bodies")) {
+            func_bodies = false;
+        } else if (mem.eql(u8, arg, "-fkeep-macro-literals")) {
+            keep_macro_literals = true;
+        } else if (mem.eql(u8, arg, "-fno-keep-macro-literals")) {
+            keep_macro_literals = false;
+        } else if (mem.eql(u8, arg, "-fdefault-init")) {
+            default_init = true;
+        } else if (mem.eql(u8, arg, "-fno-default-init")) {
+            default_init = false;
+        } else {
+            aro_args.appendAssumeCapacity(arg);
         }
-        break :args args[0..i];
-    };
+    }
     const user_macros = macros: {
         var macro_buf: std.ArrayList(u8) = .empty;
         defer macro_buf.deinit(gpa);
 
         var discard_buf: [256]u8 = undefined;
-        var discarding: std.Io.Writer.Discarding = .init(&discard_buf);
-        assert(!try d.parseArgs(&discarding.writer, &macro_buf, aro_args));
+        var discarding: Io.Writer.Discarding = .init(&discard_buf);
+        assert(!try d.parseArgs(&discarding.writer, &macro_buf, aro_args.items));
         if (macro_buf.items.len > std.math.maxInt(u32)) {
             return d.fatal("user provided macro source exceeded max size", .{});
         }
@@ -221,13 +234,13 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
         const dep_file_name = try d.getDepFileName(source, out_buf[0..std.fs.max_name_bytes]);
 
         const file = if (dep_file_name) |path|
-            d.comp.cwd.createFile(path, .{}) catch |er|
+            d.comp.cwd.createFile(io, path, .{}) catch |er|
                 return d.fatal("unable to create dependency file '{s}': {s}", .{ path, aro.Driver.errorDescription(er) })
         else
-            std.fs.File.stdout();
-        defer if (dep_file_name != null) file.close();
+            Io.File.stdout();
+        defer if (dep_file_name != null) file.close(io);
 
-        var file_writer = file.writer(&out_buf);
+        var file_writer = file.writer(io, &out_buf);
         dep_file.write(&file_writer.interface) catch
             return d.fatal("unable to write dependency file: {s}", .{aro.Driver.errorDescription(file_writer.err.?)});
     }
@@ -247,23 +260,23 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
 
     var close_out_file = false;
     var out_file_path: []const u8 = "<stdout>";
-    var out_file: std.fs.File = .stdout();
-    defer if (close_out_file) out_file.close();
+    var out_file: Io.File = .stdout();
+    defer if (close_out_file) out_file.close(io);
 
     if (d.output_name) |path| blk: {
         if (std.mem.eql(u8, path, "-")) break :blk;
         if (std.fs.path.dirname(path)) |dirname| {
-            std.fs.cwd().makePath(dirname) catch |err|
+            Io.Dir.cwd().createDirPath(io, dirname) catch |err|
                 return d.fatal("failed to create path to '{s}': {s}", .{ path, aro.Driver.errorDescription(err) });
         }
-        out_file = std.fs.cwd().createFile(path, .{}) catch |err| {
+        out_file = Io.Dir.cwd().createFile(io, path, .{}) catch |err| {
             return d.fatal("failed to create output file '{s}': {s}", .{ path, aro.Driver.errorDescription(err) });
         };
         close_out_file = true;
         out_file_path = path;
     }
 
-    var out_writer = out_file.writer(&out_buf);
+    var out_writer = out_file.writer(io, &out_buf);
     out_writer.interface.writeAll(rendered_zig) catch {};
     out_writer.interface.flush() catch {};
     if (out_writer.err) |write_err|
@@ -280,30 +293,31 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: [][:0]u8) !void {
 
 fn installLibs(d: *aro.Driver, dest_path: ?[]const u8) !void {
     const gpa = d.comp.gpa;
-    const cwd = std.fs.cwd();
+    const io = d.comp.io;
+    const cwd = Io.Dir.cwd();
 
-    const self_exe_path = try std.fs.selfExePathAlloc(gpa);
+    const self_exe_path = try std.process.executableDirPathAlloc(io, gpa);
     defer gpa.free(self_exe_path);
 
     var cur_dir: []const u8 = self_exe_path;
     while (std.fs.path.dirname(cur_dir)) |dirname| : (cur_dir = dirname) {
-        var base_dir = cwd.openDir(dirname, .{}) catch continue;
-        defer base_dir.close();
+        var base_dir = cwd.openDir(io, dirname, .{}) catch continue;
+        defer base_dir.close(io);
 
-        var lib_dir = base_dir.openDir("lib", .{}) catch continue;
-        defer lib_dir.close();
+        var lib_dir = base_dir.openDir(io, "lib", .{}) catch continue;
+        defer lib_dir.close(io);
 
-        lib_dir.access("c_builtins.zig", .{}) catch continue;
+        lib_dir.access(io, "c_builtins.zig", .{}) catch continue;
 
         {
             const install_path = try std.fs.path.join(gpa, &.{ dest_path orelse "", "c_builtins.zig" });
             defer gpa.free(install_path);
-            try lib_dir.copyFile("c_builtins.zig", cwd, install_path, .{});
+            try lib_dir.copyFile("c_builtins.zig", cwd, install_path, io, .{});
         }
         {
             const install_path = try std.fs.path.join(gpa, &.{ dest_path orelse "", "helpers.zig" });
             defer gpa.free(install_path);
-            try lib_dir.copyFile("helpers.zig", cwd, install_path, .{});
+            try lib_dir.copyFile("helpers.zig", cwd, install_path, io, .{});
         }
         return;
     }

@@ -21,6 +21,7 @@ pub fn lowerCases(
     test_translate_step: *std.Build.Step,
     test_run_translated_step: *std.Build.Step,
 ) void {
+    const io = b.graph.io;
     var targets_buf: [cross_targets.len + 1]std.Build.ResolvedTarget = undefined;
     const targets: []const std.Build.ResolvedTarget = targets: {
         targets_buf[0] = target;
@@ -32,16 +33,16 @@ pub fn lowerCases(
         break :targets &targets_buf;
     };
 
-    var dir = b.build_root.handle.openDir("test/cases", .{ .iterate = true }) catch |err| {
+    var dir = b.build_root.handle.openDir(io, "test/cases", .{ .iterate = true }) catch |err| {
         const fail_step = b.addFail(b.fmt("unable to open test/cases: {s}", .{@errorName(err)}));
         test_translate_step.dependOn(&fail_step.step);
         test_run_translated_step.dependOn(&fail_step.step);
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.walk(b.allocator) catch |err| std.debug.panic("failed to walk cases: {s}", .{@errorName(err)});
-    while (it.next() catch |err| {
+    while (it.next(io) catch |err| {
         std.debug.panic("failed to walk cases: {s}", .{@errorName(err)});
     }) |entry| {
         if (entry.kind != .file) continue;
@@ -113,9 +114,9 @@ const Case = struct {
     };
 };
 
-fn caseFromFile(b: *std.Build, entry: std.fs.Dir.Walker.Entry) !Case {
+fn caseFromFile(b: *std.Build, entry: std.Io.Dir.Walker.Entry) !Case {
     const max_file_size = 10 * 1024 * 1024;
-    const src = try entry.dir.readFileAlloc(entry.basename, b.allocator, .limited(max_file_size));
+    const src = try entry.dir.readFileAlloc(b.graph.io, entry.basename, b.allocator, .limited(max_file_size));
 
     const input, const manifest = blk: {
         var start: ?usize = null;

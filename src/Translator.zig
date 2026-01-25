@@ -621,13 +621,6 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                 break :init ZigTag.opaque_literal.init();
             }
 
-            // Demote record to opaque if it contains an opaque field
-            if (t.typeWasDemotedToOpaque(field.qt)) {
-                try t.opaque_demotes.put(t.gpa, base.qt, {});
-                try t.warn(scope, field_loc, "{s} demoted to opaque type - has opaque field", .{container_kind_name});
-                break :init ZigTag.opaque_literal.init();
-            }
-
             var field_name = field.name.lookup(t.comp);
             if (field.name_tok == 0) {
                 field_name = try std.fmt.allocPrint(t.arena, "unnamed_{d}", .{unnamed_field_count});
@@ -637,11 +630,6 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                     .field = field.qt,
                 }, field_name);
             }
-
-            const field_alignment = if (has_alignment_attributes)
-                t.alignmentForField(record_ty, head_field_alignment, field_index)
-            else
-                null;
 
             const field_type = field_type: {
                 // Check if this is a flexible array member.
@@ -677,6 +665,18 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                     else => |e| return e,
                 };
             };
+
+            // Demote record to opaque if it contains an opaque field
+            if (t.typeWasDemotedToOpaque(field.qt)) {
+                try t.opaque_demotes.put(t.gpa, base.qt, {});
+                try t.warn(scope, field_loc, "{s} demoted to opaque type - has opaque field", .{container_kind_name});
+                break :init ZigTag.opaque_literal.init();
+            }
+
+            const field_alignment = if (has_alignment_attributes)
+                t.alignmentForField(record_ty, head_field_alignment, field_index)
+            else
+                null;
 
             // C99 introduced designated initializers for structs. Omitted fields are implicitly
             // initialized to zero. Some C APIs are designed with this in mind. Defaulting to zero
