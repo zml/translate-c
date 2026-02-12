@@ -204,7 +204,9 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
         else => |e| return e,
     };
 
-    var pp = try aro.Preprocessor.initDefault(d.comp);
+    var pp = try aro.Preprocessor.init(d.comp, .{
+        .base_file = source.id,
+    });
     defer pp.deinit();
 
     var name_buf: [std.fs.max_name_bytes]u8 = undefined;
