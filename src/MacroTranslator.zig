@@ -1192,6 +1192,8 @@ fn parseCPostfixExpr(mt: *MacroTranslator, scope: *Scope, type_name: ?ZigNode) P
             .string_literal_utf_8,
             .string_literal_utf_32,
             .string_literal_wide,
+            .macro_param,
+            .macro_param_no_expand,
             => {},
             .identifier, .extended_identifier => {
                 if (mt.t.global_scope.blank_macros.contains(mt.tokSlice())) {

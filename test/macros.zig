@@ -93,6 +93,10 @@ test "string and char literals that are not UTF-8 encoded" {
     try expectEqualStrings("\xA9\xA9\xA9", latin1.UNPRINTABLE_STRING);
 }
 
+test "string literal from parameter" {
+    try expectEqualStrings("'now I have quotes'", macros.QUOTED_STR("now I have quotes"));
+}
+
 test "Macro that uses division operator" {
     try expectEqual(@as(c_int, 42), macros.DIVIDE_CONSTANT(@as(c_int, 42_000)));
     try expectEqual(@as(c_uint, 42), macros.DIVIDE_CONSTANT(@as(c_uint, 42_000)));
