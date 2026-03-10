@@ -115,6 +115,11 @@ pub const usage =
     \\  -fno-keep-macro-literals    Do not preserve macro names for literals
     \\  -fdefault-init              Default initialize struct fields
     \\  -fno-default-init           (default) Do not default initialize struct fields
+    \\  -fstrict-flex-arrays=<n>    Control when to treat a trailing array as a flexible array member (default: 2)
+    \\                                0: any trailing array
+    \\                                1: size [0]/[1]/[]
+    \\                                2: size [0]/[]
+    \\                                3: [] only
     \\
     \\
 ;
@@ -128,6 +133,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
     var func_bodies = true;
     var keep_macro_literals = true;
     var default_init = false;
+    var strict_flex_arrays: Translator.StrictFlexArraysLevel = .@"2";
 
     var aro_args: std.ArrayList([:0]const u8) = try .initCapacity(gpa, args.len);
     defer aro_args.deinit(gpa);
@@ -166,6 +172,12 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
             default_init = true;
         } else if (mem.eql(u8, arg, "-fno-default-init")) {
             default_init = false;
+        } else if (mem.startsWith(u8, arg, "-fstrict-flex-arrays=")) {
+            const val_str = arg["-fstrict-flex-arrays=".len..];
+            if (val_str.len != 1 or val_str[0] < '0' or val_str[0] > '3') {
+                return d.fatal("-fstrict-flex-arrays= requires a value of '0', '1', '2', or '3'", .{});
+            }
+            strict_flex_arrays = @enumFromInt(val_str[0] - '0');
         } else {
             aro_args.appendAssumeCapacity(arg);
         }
@@ -257,6 +269,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
         .func_bodies = func_bodies,
         .keep_macro_literals = keep_macro_literals,
         .default_init = default_init,
+        .strict_flex_arrays = strict_flex_arrays,
     });
     defer gpa.free(rendered_zig);
 

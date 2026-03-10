@@ -59,6 +59,9 @@ pub const Options = struct {
     keep_macro_literals: ?bool = null,
     /// Should struct fields be default initalized.
     default_init: ?bool = null,
+    /// Control when to treat a trailing array as a flexible array member (default: 2).
+    /// 0: any trailing array, 1: size [0]/[1]/[], 2: size [0]/[] (default), 3: [] only.
+    strict_flex_arrays: ?enum { @"0", @"1", @"2", @"3" } = null,
 };
 
 pub fn init(translate_c_dep: *Build.Dependency, options: Options) Translator {
@@ -164,6 +167,9 @@ pub fn initInner(
     addFlag(run, "func-bodies", options.func_bodies);
     addFlag(run, "keep-macro-literals", options.keep_macro_literals);
     addFlag(run, "default-init", options.default_init);
+    if (options.strict_flex_arrays) |level| {
+        run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@intFromEnum(level)}));
+    }
 
     return .{
         .output_file = output_file,

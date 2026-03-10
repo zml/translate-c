@@ -64,6 +64,19 @@ pub const MacroProcessingError = Error || error{UnexpectedMacroToken};
 pub const TypeError = Error || error{UnsupportedType};
 pub const TransError = TypeError || error{ UnsupportedTranslation, SelfReferential };
 
+/// Control when to treat a trailing array as a flexible array member.
+/// Mirrors the -fstrict-flex-arrays=<n> compiler flag.
+pub const StrictFlexArraysLevel = enum {
+    /// Any trailing array member is a flexible array.
+    @"0",
+    /// Trailing arrays of size 0, 1, or undefined are flexible.
+    @"1",
+    /// Trailing arrays of size 0 or undefined are flexible (default).
+    @"2",
+    /// Only trailing arrays of undefined size are flexible.
+    @"3",
+};
+
 const Translator = @This();
 
 /// The C AST to be translated.
@@ -81,6 +94,8 @@ func_bodies: bool,
 keep_macro_literals: bool,
 /// Should struct fields be default initialized.
 default_init: bool,
+/// Control when to treat a trailing array as a flexible array member.
+strict_flex_arrays: StrictFlexArraysLevel,
 
 gpa: mem.Allocator,
 arena: mem.Allocator,
@@ -231,6 +246,7 @@ pub const Options = struct {
     func_bodies: bool,
     keep_macro_literals: bool,
     default_init: bool,
+    strict_flex_arrays: StrictFlexArraysLevel,
 };
 
 pub fn translate(options: Options) mem.Allocator.Error![]u8 {
@@ -251,6 +267,7 @@ pub fn translate(options: Options) mem.Allocator.Error![]u8 {
         .func_bodies = options.func_bodies,
         .keep_macro_literals = options.keep_macro_literals,
         .default_init = options.default_init,
+        .strict_flex_arrays = options.strict_flex_arrays,
     };
     translator.global_scope.* = Scope.Root.init(&translator);
     defer {
@@ -636,13 +653,17 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                 flexible: {
                     if (field_index != record_ty.fields.len - 1 and container_kind != .@"union") break :flexible;
                     const array_ty = field.qt.get(t.comp, .array) orelse break :flexible;
-                    if (array_ty.len != .incomplete and (array_ty.len != .fixed or array_ty.len.fixed != 0)) break :flexible;
+                    if (!t.isFlexibleArrayLen(array_ty.len)) break :flexible;
 
                     const elem_type = t.transType(scope, array_ty.elem, field_loc) catch |err| switch (err) {
                         error.UnsupportedType => break :flexible,
                         else => |e| return e,
                     };
-                    const zero_array = try ZigTag.array_type.create(t.arena, .{ .len = 0, .elem_type = elem_type });
+                    const backing_array_len: usize = switch (array_ty.len) {
+                        .fixed => |n| @intCast(n),
+                        else => 0,
+                    };
+                    const backing_array = try ZigTag.array_type.create(t.arena, .{ .len = backing_array_len, .elem_type = elem_type });
 
                     const member_name = field_name;
                     field_name = try std.fmt.allocPrint(t.arena, "_{s}", .{field_name});
@@ -650,7 +671,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                     const member = try t.createFlexibleMemberFn(member_name, field_name);
                     try functions.append(t.gpa, member);
 
-                    break :field_type zero_array;
+                    break :field_type backing_array;
                 }
 
                 break :field_type t.transType(scope, field.qt, field_loc) catch |err| switch (err) {
@@ -2234,8 +2255,8 @@ fn transExpr(t: *Translator, scope: *Scope, expr: Node.Index, used: ResultUsed) 
         .shl_expr => |shl_expr| try t.transShiftExpr(scope, shl_expr, .shl),
         .shr_expr => |shr_expr| try t.transShiftExpr(scope, shr_expr, .shr),
 
-        .member_access_expr => |member_access| try t.transMemberAccess(scope, .normal, member_access, null),
-        .member_access_ptr_expr => |member_access| try t.transMemberAccess(scope, .ptr, member_access, null),
+        .member_access_expr => |member_access| try t.transMemberAccess(scope, .normal, member_access, null, .accessor),
+        .member_access_ptr_expr => |member_access| try t.transMemberAccess(scope, .ptr, member_access, null, .accessor),
         .array_access_expr => |array_access| try t.transArrayAccess(scope, array_access, null),
 
         .builtin_ref => unreachable,
@@ -2520,8 +2541,22 @@ fn transCastExpr(
                 else => {},
             }
 
-            if (cast.operand.qt(t.tree).arrayLen(t.comp) == null) {
-                return try t.transExpr(scope, cast.operand, used);
+            // Flexible array members are translated as member functions returning
+            // [*c]T, so no address-of + @ptrCast wrapping is needed.
+            flexible: {
+                if (cast.operand.qt(t.tree).arrayLen(t.comp) == null) {
+                    return try t.transExpr(scope, cast.operand, used);
+                }
+
+                const member_index, const base_qt = switch (cast.operand.get(t.tree)) {
+                    .member_access_expr => |ma| .{ ma.member_index, ma.base.qt(t.tree) },
+                    .member_access_ptr_expr => |ma| .{ ma.member_index, ma.base.qt(t.tree).childType(t.comp) },
+                    else => break :flexible,
+                };
+                const record = base_qt.getRecord(t.comp) orelse break :flexible;
+                if (member_index != record.fields.len - 1 and base_qt.base(t.comp).type != .@"union") break :flexible;
+                const array_ty = record.fields[member_index].qt.get(t.comp, .array) orelse break :flexible;
+                if (t.isFlexibleArrayLen(array_ty.len)) return try t.transExpr(scope, cast.operand, used);
             }
 
             const sub_expr_node = try t.transExpr(scope, cast.operand, .used);
@@ -3174,6 +3209,7 @@ fn transMemberAccess(
     kind: enum { normal, ptr },
     member_access: Node.MemberAccess,
     opt_base: ?ZigNode,
+    flex_array_mode: enum { accessor, backing },
 ) TransError!ZigNode {
     const base_info = switch (kind) {
         .normal => member_access.base.qt(t.tree),
@@ -3202,8 +3238,14 @@ fn transMemberAccess(
     // Flexible array members are translated as member functions.
     if (member_access.member_index == record.fields.len - 1 or base_info.base(t.comp).type == .@"union") {
         if (field.qt.get(t.comp, .array)) |array_ty| {
-            if (array_ty.len == .incomplete or (array_ty.len == .fixed and array_ty.len.fixed == 0)) {
-                return ZigTag.call.create(t.arena, .{ .lhs = field_access, .args = &.{} });
+            if (t.isFlexibleArrayLen(array_ty.len)) {
+                switch (flex_array_mode) {
+                    .accessor => return ZigTag.call.create(t.arena, .{ .lhs = field_access, .args = &.{} }),
+                    .backing => {
+                        const backing_name = try std.fmt.allocPrint(t.arena, "_{s}", .{field_name});
+                        return ZigTag.field_access.create(t.arena, .{ .lhs = lhs, .field_name = backing_name });
+                    },
+                }
             }
         }
     }
@@ -3293,7 +3335,10 @@ fn transMemberDesignator(t: *Translator, scope: *Scope, arg: Node.Index) TransEr
         },
         .member_access_expr => |access| {
             const base = try t.transMemberDesignator(scope, access.base);
-            return t.transMemberAccess(scope, .normal, access, base);
+            // In offsetof context, flexible array members must be accessed via
+            // the backing field (`_name`) rather than the accessor function,
+            // because you can't take the address of a function call result.
+            return t.transMemberAccess(scope, .normal, access, base, .backing);
         },
         .cast => |cast| {
             assert(cast.kind == .array_to_pointer);
@@ -4132,6 +4177,25 @@ fn vectorTypeInfo(t: *Translator, vec_node: ZigNode, field: []const u8) TransErr
     return ZigTag.field_access.create(t.arena, .{ .lhs = vector_type_info, .field_name = field });
 }
 
+/// Returns true if the given array length qualifies as a flexible array member
+/// under the current -fstrict-flex-arrays level.
+fn isFlexibleArrayLen(t: *const Translator, len: anytype) bool {
+    return switch (t.strict_flex_arrays) {
+        .@"0" => true,
+        .@"1" => switch (len) {
+            .incomplete => true,
+            .fixed => |n| n <= 1,
+            else => false,
+        },
+        .@"2" => switch (len) {
+            .incomplete => true,
+            .fixed => |n| n == 0,
+            else => false,
+        },
+        .@"3" => len == .incomplete,
+    };
+}
+
 /// Build a getter function for a flexible array field in a C record
 /// e.g. `T items[]` or `T items[0]`. The generated function returns a [*c] pointer
 /// to the flexible array with the correct const and volatile qualifiers
@@ -4140,7 +4204,13 @@ fn createFlexibleMemberFn(
     member_name: []const u8,
     field_name: []const u8,
 ) Error!ZigNode {
-    const self_param_name = "self";
+    // Use `_self` instead of the conventional `self` to avoid the Zig error
+    // "function parameter shadows declaration of 'self'".
+    // `processContainerMemberFns` merges C functions matching a struct's name
+    // prefix into the struct as `pub const` aliases (e.g. `foo_self()` becomes
+    // `pub const self = __root.foo_self`). A parameter also named `self` would
+    // then shadow that declaration, which Zig rejects.
+    const self_param_name = "_self";
     const self_param = try ZigTag.identifier.create(t.arena, self_param_name);
     const self_type = try ZigTag.typeof.create(t.arena, self_param);
 
