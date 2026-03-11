@@ -225,6 +225,22 @@ pub fn addConfigHeader(t: *const Translator, ch: *Build.Step.ConfigHeader) void 
     appendIncludeArg(t.run, "-I", ch.getOutputDir());
 }
 
+/// Links `lib` to `t.mod`, and exposes any headers installed by `lib` to translate-c.
+pub fn linkSystemLibrary(
+    t: *const Translator,
+    name: []const u8,
+    options: std.Build.Module.LinkSystemLibraryOptions,
+) void {
+    t.mod.linkSystemLibrary(name, options);
+    if (options.use_pkg_config != .no) {
+        if (Build.Step.Compile.runPkgConfig(&t.run.step, name)) |result| {
+            t.run.addArgs(result.cflags);
+        } else |err| {
+            std.debug.panic("pkg-config failed for library {s}: {t}", .{ name, err });
+        }
+    }
+}
+
 /// If the value is omitted, it is set to 1.
 /// `name` and `value` need not live longer than the function call.
 pub fn defineCMacro(t: *const Translator, name: []const u8, value: ?[]const u8) void {
