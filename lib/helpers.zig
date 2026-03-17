@@ -90,7 +90,7 @@ pub fn FlexibleArrayType(comptime SelfType: type, comptime ElementType: type) ty
                 .@"volatile" = ptr.is_volatile,
                 .@"allowzero" = true,
                 .@"addrspace" = .generic,
-                .@"align" = @alignOf(ElementType),
+                .@"align" = null,
             }, ElementType, null);
         },
         else => |info| @compileError("Invalid self type \"" ++ @tagName(info) ++ "\" for flexible array getter: " ++ @typeName(SelfType)),
