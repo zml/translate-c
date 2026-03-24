@@ -128,7 +128,7 @@ pub fn initInner(
             appendIncludeArg(run, "-idirafter", .{ .cwd_relative = clang_intrinsic_include_dir });
         }
     } else {
-        run.addArg("-nostdinc");
+        run.addArg("-nostdlibinc"); // Builtin headers should be included even when not linking libc
     }
 
     if (options.target.query.isNativeOs() and options.target.query.isNativeAbi() and options.link_libc) {
