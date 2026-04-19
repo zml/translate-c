@@ -15,7 +15,7 @@ int log2(uint32_t a) {
 //     var i: c_int = 0;
 //     _ = &i;
 //     while (a > @as(u32, 0)) {
-//         a >>= @intCast(1);
+//         a >>= @intCast(@as(u32, 1));
 //     }
 //     return i;
 // }

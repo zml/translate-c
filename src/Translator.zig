@@ -3076,11 +3076,10 @@ fn transCompoundAssignSimple(t: *Translator, scope: *Scope, lhs_dummy_opt: ?ZigN
         break :blk try t.transExpr(scope, bin.lhs, .used);
     };
 
-    const rhs_node = try t.transExprCoercing(scope, bin.rhs, .used);
     const casted_rhs = switch (cast) {
-        .none => rhs_node,
-        .shift => try ZigTag.int_cast.create(t.arena, rhs_node),
-        .usize => try t.usizeCastForWrappingPtrArithmetic(rhs_node),
+        .none => try t.transExprCoercing(scope, bin.rhs, .used),
+        .shift => try ZigTag.int_cast.create(t.arena, try t.transExpr(scope, bin.rhs, .used)),
+        .usize => try t.usizeCastForWrappingPtrArithmetic(try t.transExpr(scope, bin.rhs, .used)),
     };
     return try t.createBinOpNode(op, lhs_node, casted_rhs);
 }

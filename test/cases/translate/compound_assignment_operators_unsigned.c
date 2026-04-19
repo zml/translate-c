@@ -47,12 +47,12 @@ void foo(void) {
 //     };
 //     a >>= @intCast(blk: {
 //         const ref = &a;
-//         ref.* >>= @intCast(1);
+//         ref.* >>= @intCast(@as(c_uint, 1));
 //         break :blk ref.*;
 //     });
 //     a <<= @intCast(blk: {
 //         const ref = &a;
-//         ref.* <<= @intCast(1);
+//         ref.* <<= @intCast(@as(c_uint, 1));
 //         break :blk ref.*;
 //     });
 // }
