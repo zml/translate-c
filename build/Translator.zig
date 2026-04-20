@@ -154,6 +154,10 @@ pub fn initInner(
         // semantic analysis, so only needs to know include paths.
     }
 
+    for (b.search_prefixes.items) |search_prefix| {
+        appendIncludeArg(run, "-I", .{ .cwd_relative = b.pathJoin(&.{ search_prefix, "include" }) });
+    }
+
     switch (options.warnings) {
         .ignore => run.addArg("-w"),
         .show => {},
