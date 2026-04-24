@@ -2,7 +2,7 @@
     .name = .examples,
     .version = "0.0.0",
     .fingerprint = 0x7bd0ad45e4b4e146,
-    .minimum_zig_version = "0.15.0-dev.460+f4e9846bc",
+    .minimum_zig_version = "0.16.0",
     .paths = .{""},
     .dependencies = .{
         .compile_c = .{ .path = "compile_c" },
