@@ -2,14 +2,26 @@ const std = @import("std");
 const Translator = @import("../build/Translator.zig");
 
 const cross_targets: []const []const u8 = &.{
-    "x86_64-freebsd",
-    "x86_64-linux",
-    "x86_64-windows",
     "aarch64-freebsd",
+    "arm-freebsd",
+    "x86_64-freebsd",
+
     "aarch64-linux",
-    "aarch64-macos",
-    "aarch64-windows",
     "arm-linux",
+    "loongarch64-linux",
+    "powerpc64le-linux",
+    "riscv64-linux",
+    "s390x-linux",
+    "x86_64-linux",
+
+    "aarch64-macos",
+
+    "aarch64-openbsd",
+    "arm-openbsd",
+    "x86_64-openbsd",
+
+    "aarch64-windows",
+    "x86_64-windows",
 };
 
 pub fn lowerCases(
