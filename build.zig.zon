@@ -1,7 +1,7 @@
 .{
     .name = .translate_c,
 
-    .version = "0.0.0",
+    .version = "1.0.0",
 
     .fingerprint = 0x1c84f6455a54f043, // Changing this has security and trust implications.
 
