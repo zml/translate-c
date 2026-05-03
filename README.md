@@ -1,6 +1,10 @@
 # Translate-C
 
-A Zig package for translating C code into Zig code, intended to replace `@cImport` and `zig translate-c`.
+A Zig package for translating C code into Zig code, intended to replace
+`@cImport` and `zig translate-c`.
+
+This is the main branch, which tracks master branch of Zig. Other branches
+track other versions of Zig.
 
 ## Usage
 
@@ -35,6 +39,33 @@ const translated_to_zig: LazyPath = t.output_file;
 ```
 
 For a more complete usage, take a look at the [Examples](#examples).
+
+## Options
+
+```zig
+/// Should static functions be translated as `pub`.
+pub_static: bool,
+/// Should function bodies be translated.
+func_bodies: bool,
+/// Should macro names of literals be preserved.
+keep_macro_literals: bool,
+/// Should struct fields be default initialized.
+default_init: bool,
+/// Control when to treat a trailing array as a flexible array member.
+/// Mirrors the -fstrict-flex-arrays=<n> compiler flag.
+strict_flex_arrays: StrictFlexArraysLevel,
+
+pub const StrictFlexArraysLevel = enum {
+    /// Any trailing array member is a flexible array.
+    @"0",
+    /// Trailing arrays of size 0, 1, or undefined are flexible.
+    @"1",
+    /// Trailing arrays of size 0 or undefined are flexible (default).
+    @"2",
+    /// Only trailing arrays of undefined size are flexible.
+    @"3",
+};
+```
 
 ## Examples
 
