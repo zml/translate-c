@@ -1972,31 +1972,7 @@ fn renderNode(c: *Context, node: Node) Allocator.Error!NodeIndex {
         },
         .array_filler => {
             const payload = node.castTag(.array_filler).?.data;
-
-            const type_expr = try renderArrayType(c, 1, payload.type);
-            const l_brace = try c.addToken(.l_brace, "{");
-            const val = try renderNode(c, payload.filler);
-            _ = try c.addToken(.r_brace, "}");
-
-            const init = try c.addNode(.{
-                .tag = .array_init_one,
-                .main_token = l_brace,
-                .data = .{ .node_and_node = .{
-                    type_expr, val,
-                } },
-            });
-            return c.addNode(.{
-                .tag = .array_cat,
-                .main_token = try c.addToken(.asterisk_asterisk, "**"),
-                .data = .{ .node_and_node = .{
-                    init,
-                    try c.addNode(.{
-                        .tag = .number_literal,
-                        .main_token = try c.addTokenFmt(.number_literal, "{d}", .{payload.count}),
-                        .data = undefined,
-                    }),
-                } },
-            });
+            return renderBuiltinCall(c, "@splat", &.{payload.filler});
         },
         .empty_array => {
             const payload = node.castTag(.empty_array).?.data;
