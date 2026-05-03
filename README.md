@@ -29,6 +29,7 @@ const t: Translator = .init(translate_c, .{
     .c_source_file = b.path("to_translate.h"),
     .target = target,
     .optimize = optimize,
+    // more options go here (see below)
 });
 // If you want, you can now call methods on `Translator` to add include paths (etc).
 
