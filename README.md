@@ -10,6 +10,11 @@ track other versions of Zig.
 
 Add `translate-c` to your `build.zig.zon` with this command:
 
+| Zig Version | Recommended `translate-c` Commit                                            |
+|---          |---                                                                          |
+| 0.17.0-dev  | `zig fetch --save git+https://codeberg.org/ziglang/translate-c`             |
+| 0.16.0      | `zig fetch --save git+https://codeberg.org/ziglang/translate-c#zig-0.16.x`  |
+
 ```sh-session
 $ zig fetch --save git+https://codeberg.org/ziglang/translate-c
 info: resolved to commit 1aa9ec052415feeaa0494190ae35a94849a24399
