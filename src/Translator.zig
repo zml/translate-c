@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const assert = std.debug.assert;
 const CallingConvention = std.builtin.CallingConvention;
+pub const Error = std.mem.Allocator.Error;
 
 const aro = @import("aro");
 const CToken = aro.Tokenizer.Token;
@@ -59,7 +60,6 @@ pub const QualTypeHashContext = struct {
     }
 };
 
-pub const Error = std.mem.Allocator.Error;
 pub const MacroProcessingError = Error || error{UnexpectedMacroToken};
 pub const TypeError = Error || error{UnsupportedType};
 pub const TransError = TypeError || error{ UnsupportedTranslation, SelfReferential };
@@ -3377,6 +3377,15 @@ fn transBuiltinCall(
     if (builtin.tag) |tag| switch (tag) {
         .byte_swap, .ceil, .cos, .sin, .exp, .exp2, .exp10, .abs, .log, .log2, .log10, .round, .sqrt, .trunc, .floor => {
             assert(call.args.len == 1);
+            const arg = try t.transExprCoercing(scope, call.args[0], .used);
+            const arg_ty = try t.transType(scope, call.args[0].qt(t.tree), call.args[0].tok(t.tree));
+            const coerced = try ZigTag.as.create(t.arena, .{ .lhs = arg_ty, .rhs = arg });
+
+            const ptr = try t.arena.create(ast.Payload.UnOp);
+            ptr.* = .{ .base = .{ .tag = tag }, .data = coerced };
+            return t.maybeSuppressResult(used, ZigNode.initPayload(&ptr.base));
+        },
+        .clz, .ctz => if (call.args.len == 1) { // elementwise ctz/clz with second argument requires special handling
             const arg = try t.transExprCoercing(scope, call.args[0], .used);
             const arg_ty = try t.transType(scope, call.args[0].qt(t.tree), call.args[0].tok(t.tree));
             const coerced = try ZigTag.as.create(t.arena, .{ .lhs = arg_ty, .rhs = arg });
