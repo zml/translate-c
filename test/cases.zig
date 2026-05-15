@@ -4,6 +4,8 @@ const Translator = @import("../build/Translator.zig");
 const cross_targets: []const []const u8 = &.{
     "aarch64-freebsd",
     "arm-freebsd",
+    "powerpc64le-freebsd",
+    "riscv64-freebsd",
     "x86_64-freebsd",
 
     "aarch64-linux",
@@ -16,8 +18,13 @@ const cross_targets: []const []const u8 = &.{
 
     "aarch64-macos",
 
+    "aarch64-netbsd",
+    "arm-netbsd",
+    "x86_64-netbsd",
+
     "aarch64-openbsd",
     "arm-openbsd",
+    "riscv64-openbsd",
     "x86_64-openbsd",
 
     "aarch64-windows",
