@@ -121,15 +121,15 @@ pub fn initInner(
             for (libc.libc_framework_dir_list) |framework_dir| {
                 appendIncludeArg(run, "-iframework", .{ .cwd_relative = framework_dir });
             }
-
-            // Add Clang builtin includes with `-idirafter` to supplement missing headers
-            // like `mm_malloc.h` and `intrin.h` while still preferring Aro's own ones when they exist.
-            const clang_intrinsic_include_dir = b.graph.zig_lib_directory.join(b.graph.arena, &.{"include"}) catch @panic("OOM");
-            appendIncludeArg(run, "-idirafter", .{ .cwd_relative = clang_intrinsic_include_dir });
         }
     } else {
         run.addArg("-nostdlibinc"); // Builtin headers should be included even when not linking libc
     }
+
+    // Add Clang builtin includes with `-idirafter` to supplement missing headers
+    // like `mm_malloc.h` and `intrin.h` while still preferring Aro's own ones when they exist.
+    const clang_intrinsic_include_dir = b.graph.zig_lib_directory.join(b.graph.arena, &.{"include"}) catch @panic("OOM");
+    appendIncludeArg(run, "-idirafter", .{ .cwd_relative = clang_intrinsic_include_dir });
 
     if (options.target.query.isNativeOs() and options.target.query.isNativeAbi() and options.link_libc) {
         const paths = std.zig.system.NativePaths.detect(
