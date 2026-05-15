@@ -20,8 +20,8 @@ uint32_t no_null_w[3] = U"💯💯💯";
 // pub export var zero_w: [0]u32 = [0]u32{};
 // pub export var empty_incomplete: [0:0]u8 = [0:0]u8{};
 // pub export var empty_incomplete_w: [0:0]u32 = [0:0]u32{};
-// pub export var empty_constant: [100]u8 = [1]u8{0} ** 100;
-// pub export var empty_constant_w: [100]u32 = [1]u32{0} ** 100;
+// pub export var empty_constant: [100]u8 = @as([100]u8, @splat(0));
+// pub export var empty_constant_w: [100]u32 = @as([100]u32, @splat(0));
 // pub export var incomplete: [3:0]u8 = "abc".*;
 // pub export var incomplete_w: [3:0]u32 = [3:0]u32{
 //     '\u{1f4af}',
@@ -32,10 +32,10 @@ uint32_t no_null_w[3] = U"💯💯💯";
 // pub export var truncated_w: [1]u32 = [1]u32{
 //     '\u{1f4af}',
 // };
-// pub export var extend: [5]u8 = "a"[0..1].* ++ [1]u8{0} ** 4;
+// pub export var extend: [5]u8 = "a"[0..1].* ++ @as([4]u8, @splat(0));
 // pub export var extend_w: [5]u32 = [1]u32{
 //     '\u{1f4af}',
-// } ++ [1]u32{0} ** 4;
+// } ++ @as([4]u32, @splat(0));
 // pub export var no_null: [3]u8 = "abc".*;
 // pub export var no_null_w: [3]u32 = [3]u32{
 //     '\u{1f4af}',

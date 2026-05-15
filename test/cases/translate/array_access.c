@@ -6,7 +6,7 @@ int foo(int index) {
 
 // translate
 //
-// pub export var array: [100]c_int = [1]c_int{0} ** 100;
+// pub export var array: [100]c_int = @as([100]c_int, @splat(0));
 // pub export fn foo(arg_index: c_int) c_int {
 //     var index = arg_index;
 //     _ = &index;

@@ -13,16 +13,16 @@ static void foo(void){
 // pub fn foo() callconv(.c) void {
 //     var arr: [10]u8 = [1]u8{
 //         1,
-//     } ++ [1]u8{0} ** 9;
+//     } ++ @as([9]u8, @splat(0));
 //     _ = &arr;
 //     var arr1: [10][*c]u8 = [1][*c]u8{
 //         null,
-//     } ++ [1][*c]u8{null} ** 9;
+//     } ++ @as([9][*c]u8, @splat(null));
 //     _ = &arr1;
 //     var arr2: [5]c_int = [2]c_int{
 //         0,
 //         1,
-//     } ++ [1]c_int{0} ** 1 ++ [2]c_int{
+//     } ++ @as([1]c_int, @splat(0)) ++ [2]c_int{
 //         3,
 //         4,
 //     };
@@ -31,17 +31,17 @@ static void foo(void){
 //         100,
 //         4,
 //         5,
-//     } ++ [1]c_int{0} ** 3;
+//     } ++ @as([3]c_int, @splat(0));
 //     _ = &arr3;
-//     var arr4: [7]c_int = [1]c_int{0} ** 1 ++ [2]c_int{
+//     var arr4: [7]c_int = @as([1]c_int, @splat(0)) ++ [2]c_int{
 //         1,
 //         2,
-//     } ++ [1]c_int{0} ** 2 ++ [1]c_int{
+//     } ++ @as([2]c_int, @splat(0)) ++ [1]c_int{
 //         5,
-//     } ++ [1]c_int{0} ** 1;
+//     } ++ @as([1]c_int, @splat(0));
 //     _ = &arr4;
 //     var arr5: [0]c_int = .{};
 //     _ = &arr5;
-//     var arr6: [9]c_int = [1]c_int{0} ** 9;
+//     var arr6: [9]c_int = @as([9]c_int, @splat(0));
 //     _ = &arr6;
 // }
