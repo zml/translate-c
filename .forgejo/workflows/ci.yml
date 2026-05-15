@@ -32,6 +32,7 @@ jobs:
           - aarch64-macos
           - x86_64-freebsd
           - x86_64-linux
+          - x86_64-netbsd
           - x86_64-windows
 
     runs-on:
@@ -55,6 +56,10 @@ jobs:
       - name: Build 32-bit Linux
         if: matrix.host == 'x86_64-linux'
         run: zig build --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=arm-linux
+
+      - name: Build 32-bit NetBSD
+        if: matrix.host == 'x86_64-netbsd'
+        run: zig build --maxrss ${{ env.ZSF_MAX_RSS }} -Dtarget=arm-netbsd
 
       - name: Run Tests
         run: |
