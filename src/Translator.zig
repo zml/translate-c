@@ -1924,10 +1924,14 @@ fn transForStmt(t: *Translator, scope: *Scope, for_stmt: Node.ForStmt) TransErro
     else
         ZigTag.true_literal.init();
 
-    const cont_expr = if (for_stmt.incr) |incr|
-        try t.transExpr(&cond_scope.base, incr, .unused)
-    else
-        null;
+    var incr_scope = try Scope.Block.init(t, &cond_scope.base, false);
+    defer incr_scope.deinit();
+    const cont_expr = if (for_stmt.incr) |incr| blk: {
+        const last = try t.transExpr(&incr_scope.base, incr, .unused);
+        if (incr_scope.statements.items.len == 0) break :blk last;
+        try incr_scope.statements.append(t.gpa, last);
+        break :blk try incr_scope.complete();
+    } else null;
 
     const body = try t.maybeBlockify(&loop_scope, for_stmt.body);
     const while_node = try ZigTag.@"while".create(t.arena, .{ .cond = cond, .body = body, .cont_expr = cont_expr });
