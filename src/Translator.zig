@@ -3820,8 +3820,8 @@ fn transArrayInit(
                 defer val_list.clearRetainingCapacity();
                 while (i < array_init.items.len) : (i += 1) {
                     if (array_init.items[i].get(t.tree) == .array_filler_expr) break;
-                    const expr = try t.transExprCoercing(scope, array_init.items[i], .used);
-                    try val_list.append(t.gpa, try t.toNonBool(expr, array_item_qt));
+                    const init_node = try t.transInitializerExpr(scope, array_init.items[i], array_item_qt);
+                    try val_list.append(t.gpa, init_node);
                 }
                 const array_type = try ZigTag.array_type.create(t.arena, .{
                     .elem_type = array_item_type,
@@ -3869,10 +3869,7 @@ fn transUnionInit(
     }).? else field.name.lookup(t.comp);
 
     const field_init = try t.arena.create(ast.Payload.ContainerInit.Initializer);
-    field_init.* = .{
-        .name = field_name,
-        .value = try t.toNonBool(try t.transExprCoercing(scope, init_expr, .used), field.qt),
-    };
+    field_init.* = .{ .name = field_name, .value = try t.transInitializerExpr(scope, init_expr, field.qt) };
     const container_init = try ZigTag.container_init.create(t.arena, .{
         .lhs = union_type,
         .inits = field_init[0..1],
@@ -3900,10 +3897,7 @@ fn transStructInit(
             .parent = struct_base.qt,
             .field = field.qt,
         }).? else field.name.lookup(t.comp);
-        init.* = .{
-            .name = field_name,
-            .value = try t.toNonBool(try t.transExprCoercing(scope, field_expr, .used), field.qt),
-        };
+        init.* = .{ .name = field_name, .value = try t.transInitializerExpr(scope, field_expr, field.qt) };
     }
 
     const container_init = try ZigTag.container_init.create(t.arena, .{
@@ -3911,6 +3905,21 @@ fn transStructInit(
         .inits = field_inits,
     });
     return container_init;
+}
+
+fn transInitializerExpr(
+    t: *Translator,
+    scope: *Scope,
+    item: Node.Index,
+    init_qt: QualType,
+) TransError!ZigNode {
+    switch (item.get(t.tree)) {
+        .string_literal_expr => |literal| {
+            const array_type = try t.transTypeInit(scope, init_qt, item, literal.literal_tok);
+            return t.transStringLiteralInitializer(item, literal, array_type);
+        },
+        else => return t.toNonBool(try t.transExprCoercing(scope, item, .used), init_qt),
+    }
 }
 
 fn transTypeInfo(

@@ -7,6 +7,13 @@ static void foo(void){
     int arr5[0] = {};
     int arr6[9] = {};
 }
+struct S {
+    char label[8];
+} s = { .label = "start" };
+union U {
+    char label[8];
+} u = { .label = "start" };
+char a[2][8] = {"start"};
 
 // translate
 //
@@ -45,3 +52,15 @@ static void foo(void){
 //     var arr6: [9]c_int = @as([9]c_int, @splat(0));
 //     _ = &arr6;
 // }
+//
+// pub export var s: struct_S = struct_S{
+//     .label = "start"[0..5].* ++ @as([3]u8, @splat(0)),
+// };
+//
+// pub export var u: union_U = union_U{
+//     .label = "start"[0..5].* ++ @as([3]u8, @splat(0)),
+// };
+//
+// pub export var a: [2][8]u8 = [1][8]u8{
+//     "start"[0..5].* ++ @as([3]u8, @splat(0)),
+// } ++ @as([1][8]u8, @splat(@import("std").mem.zeroes([8]u8)));
