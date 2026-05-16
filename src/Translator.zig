@@ -3007,7 +3007,7 @@ fn transCompoundAssign(
     const ref_node = try ZigTag.deref.create(t.arena, lhs_node);
 
     // Use the equivalent Zig operator if possible.
-    if (try t.transCompoundAssignSimple(scope, ref_node, assign)) |some| {
+    if (try t.transCompoundAssignSimple(&block_scope.base, ref_node, assign)) |some| {
         try block_scope.statements.append(t.gpa, some);
     } else {
         const old_dummy = t.compound_assign_dummy;
