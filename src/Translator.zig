@@ -3382,7 +3382,7 @@ fn transBuiltinCall(
 
     const arg_nodes = try t.arena.alloc(ZigNode, call.args.len);
     for (call.args, arg_nodes) |c_arg, *zig_arg| {
-        zig_arg.* = try t.transExprCoercing(scope, c_arg, .used);
+        zig_arg.* = try t.transExpr(scope, c_arg, .used);
     }
 
     const builtin_identifier = try ZigTag.identifier.create(t.arena, "__builtin");
