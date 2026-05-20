@@ -2151,7 +2151,7 @@ fn transExpr(t: *Translator, scope: *Scope, expr: Node.Index, used: ResultUsed) 
         .paren_expr => |paren_expr| {
             return t.transExpr(scope, paren_expr.operand, used);
         },
-        .cast => |cast| return t.transCastExpr(scope, cast, cast.qt, used, .with_as),
+        .cast => |cast| return t.maybeTransCastExpr(scope, cast, cast.qt, used, .with_as),
         .decl_ref_expr => |decl_ref| try t.transDeclRefExpr(scope, decl_ref),
         .enumeration_ref => |enum_ref| try t.transDeclRefExpr(scope, enum_ref),
         .addr_of_expr => |addr_of_expr| try ZigTag.address_of.create(t.arena, try t.transExpr(scope, addr_of_expr.operand, .used)),
@@ -2408,7 +2408,7 @@ fn transExprCoercing(t: *Translator, scope: *Scope, expr: Node.Index, used: Resu
                 return t.transExprCoercing(scope, cast.operand, used);
             },
             .lval_to_rval => return t.transExprCoercing(scope, cast.operand, used),
-            else => return t.transCastExpr(scope, cast, cast.qt, used, .no_as),
+            else => return t.maybeTransCastExpr(scope, cast, cast.qt, used, .no_as),
         },
         .default_init_expr => |default_init| return try t.transDefaultInit(scope, default_init, used, .no_as),
         .compound_literal_expr => |literal| {
@@ -2477,6 +2477,20 @@ fn finishBoolExpr(t: *Translator, qt: QualType, node: ZigNode) TransError!ZigNod
         return ZigTag.not_equal.create(t.arena, .{ .lhs = node, .rhs = ZigTag.zero_literal.init() });
     }
     unreachable; // Unexpected bool expression type
+}
+
+fn maybeTransCastExpr(
+    t: *Translator,
+    scope: *Scope,
+    cast: Node.Cast,
+    dest_qt: QualType,
+    used: ResultUsed,
+    suppress_as: SuppressCast,
+) TransError!ZigNode {
+    return if (used == .used)
+        t.transCastExpr(scope, cast, dest_qt, used, suppress_as)
+    else
+        t.transExpr(scope, cast.operand, used);
 }
 
 fn transCastExpr(
