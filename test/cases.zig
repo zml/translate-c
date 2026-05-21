@@ -52,7 +52,7 @@ pub fn lowerCases(
         break :targets &targets_buf;
     };
 
-    var dir = b.build_root.handle.openDir(io, "test/cases", .{ .iterate = true }) catch |err| {
+    var dir = b.root.openDir(io, "test/cases", .{ .iterate = true }) catch |err| {
         const fail_step = b.addFail(b.fmt("unable to open test/cases: {s}", .{@errorName(err)}));
         test_translate_step.dependOn(&fail_step.step);
         test_run_translated_step.dependOn(&fail_step.step);

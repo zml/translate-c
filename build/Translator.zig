@@ -82,11 +82,22 @@ pub fn initInner(
     options: Options,
 ) Translator {
     // Try our best to get a reasonable name; we need one to name the steps and the output file.
-    const name = options.name orelse std.fs.path.stem(options.c_source_file.getDisplayName());
+    const name = options.name orelse std.fs.path.stem(b.fmt("{f}", .{options.c_source_file.fmt(b.graph)}));
 
     // We start with the basic command: 'path/to/translate-c in.c -o out.zig -MD -MV -MF deps.d'
     const run = b.addRunArtifact(tc_conf.exe);
     run.setName(b.fmt("translate-c {s}", .{name}));
+
+    if (!options.target.query.isNative()) {
+        const triple = options.target.query.zigTriple(b.graph.arena) catch @panic("OOM");
+        run.addArg(b.fmt("--target={s}", .{triple}));
+    }
+
+    if (options.link_libc)
+        run.addArg("-lc");
+
+    run.addArg("--");
+
     run.addFileArg(options.c_source_file);
     run.addArg("-o");
     const output_file = run.addOutputFileArg(b.fmt("{s}.zig", .{name}));
@@ -102,61 +113,6 @@ pub fn initInner(
     });
     mod.addImport("c_builtins", tc_conf.c_builtins);
     mod.addImport("helpers", tc_conf.helpers);
-
-    if (!options.target.query.isNative()) {
-        const triple = options.target.query.zigTriple(b.graph.arena) catch @panic("OOM");
-        run.addArg(b.fmt("--target={s}", .{triple}));
-    }
-    if (options.link_libc) {
-        // If we're cross-compiling, we need to use Zig's libc directories.
-        //
-        // Currently calling into Zig's libc detection is also necessary for native targets other
-        // than Linux due to deficiencies in Aro's toolchains for non-Linux targets.
-        if (!options.target.query.isNative() or options.target.result.os.tag != .linux) {
-            run.addArg("-nostdlibinc"); // Aro should still check its builtin dir, but we're providing everything else
-            const libc = detectLibCDirs(b, &options.target);
-            for (libc.libc_include_dir_list) |include_dir| {
-                appendIncludeArg(run, "-isystem", .{ .cwd_relative = include_dir });
-            }
-            for (libc.libc_framework_dir_list) |framework_dir| {
-                appendIncludeArg(run, "-iframework", .{ .cwd_relative = framework_dir });
-            }
-        }
-    } else {
-        run.addArg("-nostdlibinc"); // Builtin headers should be included even when not linking libc
-    }
-
-    // Add Clang builtin includes with `-idirafter` to supplement missing headers
-    // like `mm_malloc.h` and `intrin.h` while still preferring Aro's own ones when they exist.
-    const clang_intrinsic_include_dir = b.graph.zig_lib_directory.join(b.graph.arena, &.{"include"}) catch @panic("OOM");
-    appendIncludeArg(run, "-idirafter", .{ .cwd_relative = clang_intrinsic_include_dir });
-
-    if (options.target.query.isNativeOs() and options.target.query.isNativeAbi() and options.link_libc) {
-        const paths = std.zig.system.NativePaths.detect(
-            b.graph.arena,
-            b.graph.io,
-            &options.target.result,
-            &b.graph.environ_map,
-        ) catch |err| {
-            std.debug.panic("failed to detect native system paths: {t}", .{err});
-        };
-        for (paths.warnings.items) |warning| {
-            std.log.warn("{s}", .{warning});
-        }
-        for (paths.include_dirs.items) |include_dir| {
-            appendIncludeArg(run, "-isystem", .{ .cwd_relative = include_dir });
-        }
-        for (paths.framework_dirs.items) |framework_dir| {
-            appendIncludeArg(run, "-iframework", .{ .cwd_relative = framework_dir });
-        }
-        // `paths.rpaths` and `paths.lib_dirs` are intentionally omitted because Aro does not yet support
-        // the `-rpath` or `-L` flags. That's fine because Aro isn't doing any codegen, only parsing and
-        // semantic analysis, so only needs to know include paths.
-    }
-
-    for (b.search_prefixes.items) |search_prefix| {
-        appendIncludeArg(run, "-I", .{ .cwd_relative = b.pathJoin(&.{ search_prefix, "include" }) });
-    }
 
     switch (options.warnings) {
         .ignore => run.addArg("-w"),
@@ -242,13 +198,6 @@ pub fn linkSystemLibrary(
     options: std.Build.Module.LinkSystemLibraryOptions,
 ) void {
     t.mod.linkSystemLibrary(name, options);
-    if (options.use_pkg_config != .no) {
-        if (Build.Step.Compile.runPkgConfig(&t.run.step, name)) |result| {
-            t.run.addArgs(result.cflags);
-        } else |err| {
-            std.debug.panic("pkg-config failed for library {s}: {t}", .{ name, err });
-        }
-    }
 }
 
 /// If the value is omitted, it is set to 1.

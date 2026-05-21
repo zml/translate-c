@@ -73,13 +73,11 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(step: {
         const run_cmd = b.addRunArtifact(translate_c_exe);
         run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
+        run_cmd.addPassthruArgs();
         break :step &run_cmd.step;
     });
 
-    const fmt_dirs: []const []const u8 = &.{ "build", "build.zig", "src", "lib", "test", "examples" };
+    const fmt_dirs = b.pathList(&.{ "build", "build.zig", "src", "lib", "test", "examples" });
 
     const fmt_step = b.step("fmt", "Modify source files in place to have conforming formatting");
     fmt_step.dependOn(&b.addFmt(.{ .paths = fmt_dirs }).step);
