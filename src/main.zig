@@ -1,46 +1,21 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
+const Allocator = std.mem.Allocator;
 const process = std.process;
+const fatal = std.process.fatal;
 const Io = std.Io;
+const PkgConfig = std.zig.PkgConfig;
 
 const aro = @import("aro");
 
 const Translator = @import("Translator.zig");
 
-const fast_exit = @import("builtin").mode != .Debug;
-
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-
-pub fn main(init: process.Init.Minimal) u8 {
-    const gpa = if (@import("builtin").link_libc)
-        std.heap.c_allocator
-    else
-        debug_allocator.allocator();
-    defer if (!@import("builtin").link_libc) {
-        _ = debug_allocator.deinit();
-    };
-
-    var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena_instance.deinit();
-    const arena = arena_instance.allocator();
-
-    var threaded: Io.Threaded = .init(gpa, .{
-        .argv0 = .init(init.args),
-        .environ = init.environ,
-    });
-    defer threaded.deinit();
-    const io = threaded.io();
-
-    const args = init.args.toSlice(arena) catch {
-        std.debug.print("ran out of memory allocating arguments\n", .{});
-        if (fast_exit) process.exit(1);
-        return 1;
-    };
-
-    var environ_map = std.process.Environ.createMap(init.environ, gpa) catch |err|
-        std.process.fatal("failed to parse environment variables: {t}", .{err});
-    defer environ_map.deinit();
+pub fn main(init: process.Init) !void {
+    const gpa = init.gpa;
+    const arena = init.arena.allocator();
+    const io = init.io;
+    const args = try init.minimal.args.toSlice(arena);
 
     var stderr_buf: [1024]u8 = undefined;
     var stderr = Io.File.stderr().writer(io, &stderr_buf);
@@ -51,52 +26,27 @@ pub fn main(init: process.Init.Minimal) u8 {
         } },
     };
 
-    var comp = aro.Compilation.init(.{
+    var comp = try aro.Compilation.init(.{
         .gpa = gpa,
         .arena = arena,
         .io = io,
         .diagnostics = &diagnostics,
-        .environ_map = &environ_map,
-    }) catch |err| switch (err) {
-        error.OutOfMemory => {
-            std.debug.print("ran out of memory initializing C compilation\n", .{});
-            if (fast_exit) process.exit(1);
-            return 1;
-        },
-    };
+        .environ_map = init.environ_map,
+    });
     defer comp.deinit();
 
-    const exe_name = std.process.executableDirPathAlloc(io, gpa) catch {
-        std.debug.print("unable to find translate-c executable path\n", .{});
-        if (fast_exit) process.exit(1);
-        return 1;
-    };
-    defer gpa.free(exe_name);
-
-    var driver: aro.Driver = .{ .comp = &comp, .diagnostics = &diagnostics, .aro_name = exe_name };
+    var driver: aro.Driver = .{ .comp = &comp, .diagnostics = &diagnostics, .aro_name = args[0] };
     defer driver.deinit();
 
     var toolchain: aro.Toolchain = .{ .driver = &driver };
     defer toolchain.deinit();
 
-    translate(&driver, &toolchain, args) catch |err| switch (err) {
-        error.OutOfMemory => {
-            std.debug.print("ran out of memory translating\n", .{});
-            if (fast_exit) process.exit(1);
-            return 1;
-        },
-        error.FatalError => {
-            if (fast_exit) process.exit(1);
-            return 1;
-        },
-        error.WriteFailed => {
-            std.debug.print("unable to write to stdout\n", .{});
-            if (fast_exit) process.exit(1);
-            return 1;
-        },
+    translate(&driver, &toolchain, init.environ_map, args) catch |err| switch (err) {
+        else => |e| return e,
+        error.WriteFailed => @panic("aro shouldn't return this error because it doesn't accept a *Writer"),
     };
-    if (fast_exit) process.exit(@intFromBool(comp.diagnostics.errors != 0));
-    return @intFromBool(comp.diagnostics.errors != 0);
+    if (comp.diagnostics.errors != 0) process.exit(1);
+    return process.cleanExit(io);
 }
 
 pub const usage =
@@ -124,7 +74,13 @@ pub const usage =
     \\
 ;
 
-fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !void {
+fn translate(
+    d: *aro.Driver,
+    tc: *aro.Toolchain,
+    environ_map: *const process.Environ.Map,
+    args: []const [:0]const u8,
+) !void {
+    const arena = d.comp.arena;
     const gpa = d.comp.gpa;
     const io = d.comp.io;
 
@@ -134,11 +90,18 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
     var keep_macro_literals = true;
     var default_init = false;
     var strict_flex_arrays: Translator.StrictFlexArraysLevel = .@"2";
+    var target_query: std.Target.Query = .{};
+    var link_libc = false;
 
-    var aro_args: std.ArrayList([:0]const u8) = try .initCapacity(gpa, args.len);
-    defer aro_args.deinit(gpa);
+    var system_libs: std.ArrayList(SystemLib) = .empty;
+    var any_want_pkg_conf = false;
+    var any_force_pkg_conf = false;
 
-    for (args) |arg| {
+    var aro_args: std.ArrayList([]const u8) = try .initCapacity(arena, args.len);
+
+    aro_args.appendAssumeCapacity(args[0]);
+
+    for (args[1..], 1..) |arg, i| {
         if (mem.eql(u8, arg, "--help")) {
             var stdout_buf: [512]u8 = undefined;
             var stdout = Io.File.stdout().writer(io, &stdout_buf);
@@ -172,16 +135,81 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
             default_init = true;
         } else if (mem.eql(u8, arg, "-fno-default-init")) {
             default_init = false;
-        } else if (mem.startsWith(u8, arg, "-fstrict-flex-arrays=")) {
-            const val_str = arg["-fstrict-flex-arrays=".len..];
-            if (val_str.len != 1 or val_str[0] < '0' or val_str[0] > '3') {
+        } else if (mem.cutPrefix(u8, arg, "-fstrict-flex-arrays=")) |rest| {
+            if (rest.len != 1 or rest[0] < '0' or rest[0] > '3') {
                 return d.fatal("-fstrict-flex-arrays= requires a value of '0', '1', '2', or '3'", .{});
             }
-            strict_flex_arrays = @enumFromInt(val_str[0] - '0');
+            strict_flex_arrays = @enumFromInt(rest[0] - '0');
+        } else if (mem.cutPrefix(u8, arg, "--target=")) |rest| {
+            target_query = std.zig.parseTargetQueryOrReportFatalError(arena, .{
+                .arch_os_abi = rest,
+            });
+            try aro_args.append(arena, rest);
+        } else if (mem.cutPrefix(u8, arg, "-o=")) |rest| {
+            try aro_args.ensureUnusedCapacity(arena, 2);
+            aro_args.appendAssumeCapacity("-o");
+            aro_args.appendAssumeCapacity(rest);
+        } else if (mem.eql(u8, arg, "-lc")) {
+            link_libc = true;
+        } else if (mem.cutPrefix(u8, arg, "-l=")) |rest| {
+            try system_libs.append(arena, .{
+                .options = .{
+                    .needed = (rest[0] - '0') != 0,
+                    .weak = (rest[1] - '0') != 0,
+                    .use_pkg_config = @enumFromInt(rest[2] - '0'),
+                    .preferred_link_mode = @enumFromInt(rest[3] - '0'),
+                    .search_strategy = @enumFromInt(rest[4] - '0'),
+                },
+                .name = rest[6..],
+            });
+            switch (system_libs.last().?.options.use_pkg_config) {
+                .no => {},
+                .yes => any_want_pkg_conf = true,
+                .force => any_force_pkg_conf = true,
+            }
+        } else if (mem.eql(u8, arg, "--")) {
+            try aro_args.appendSlice(arena, args[i + 1 ..]);
+            break;
         } else {
-            aro_args.appendAssumeCapacity(arg);
+            fatal("unrecognized translate-c argument: {s}", .{arg});
         }
     }
+
+    var opt_pc: ?PkgConfig = null;
+    if (any_want_pkg_conf or any_force_pkg_conf) {
+        const pkg_config_exe = PkgConfig.exe(environ_map);
+        if (process.run(arena, io, .{
+            .argv = &.{ pkg_config_exe, "--list-all" },
+            .environ_map = environ_map,
+        })) |result| {
+            if (result.term.success()) {
+                opt_pc = try PkgConfig.init(arena, result.stdout, null);
+            } else if (any_force_pkg_conf) {
+                fatal("{s} {f}", .{ pkg_config_exe, result.term });
+            }
+        } else |err| {
+            if (any_force_pkg_conf) fatal("{s}: failed running --list-all: {t}", .{ pkg_config_exe, err });
+        }
+    }
+
+    if (opt_pc) |pc| {
+        var group: Io.Group = .init;
+        defer group.cancel(io);
+
+        for (system_libs.items) |*system_lib| switch (system_lib.options.use_pkg_config) {
+            .no => continue,
+            .yes, .force => group.async(io, runPkgConfig, .{ arena, io, environ_map, &pc, system_lib }),
+        };
+
+        try group.await(io);
+    }
+
+    for (system_libs.items) |*system_lib| {
+        if (system_lib.pkg_conf) |parsed| {
+            try aro_args.appendSlice(arena, parsed.cflags);
+        }
+    }
+
     const user_macros = macros: {
         var macro_buf: std.ArrayList(u8) = .empty;
         defer macro_buf.deinit(gpa);
@@ -238,10 +266,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
     var c_tree = try pp.parse();
     defer c_tree.deinit();
 
-    if (d.diagnostics.errors != 0) {
-        if (fast_exit) process.exit(1);
-        return error.FatalError;
-    }
+    if (d.diagnostics.errors != 0) process.exit(1);
 
     var out_buf: [4096]u8 = undefined;
     if (opt_dep_file) |dep_file| {
@@ -303,7 +328,7 @@ fn translate(d: *aro.Driver, tc: *aro.Toolchain, args: []const [:0]const u8) !vo
             return d.fatal("failed to install library files: {s}", .{aro.Driver.errorDescription(err)});
     }
 
-    if (fast_exit) process.exit(0);
+    return process.cleanExit(io);
 }
 
 fn installLibs(d: *aro.Driver, dest_path: ?[]const u8) !void {
@@ -311,7 +336,7 @@ fn installLibs(d: *aro.Driver, dest_path: ?[]const u8) !void {
     const io = d.comp.io;
     const cwd = Io.Dir.cwd();
 
-    const self_exe_path = try std.process.executableDirPathAlloc(io, gpa);
+    const self_exe_path = try process.executableDirPathAlloc(io, gpa);
     defer gpa.free(self_exe_path);
 
     var cur_dir: []const u8 = self_exe_path;
@@ -345,4 +370,71 @@ comptime {
         _ = @import("helpers.zig");
         _ = @import("PatternList.zig");
     }
+}
+
+const SystemLib = struct {
+    name: []const u8,
+    options: std.Build.Module.LinkSystemLibraryOptions,
+    pkg_conf: ?std.zig.PkgConfig.Parsed = null,
+};
+
+fn runPkgConfig(
+    arena: Allocator,
+    io: Io,
+    environ_map: *const process.Environ.Map,
+    pc: *const PkgConfig,
+    system_lib: *SystemLib,
+) void {
+    const force = switch (system_lib.options.use_pkg_config) {
+        .no => unreachable,
+        .yes => false,
+        .force => true,
+    };
+
+    const lib_name = system_lib.name;
+    const pkg_config_exe = std.zig.PkgConfig.exe(environ_map);
+    const found_index = pc.find(lib_name) orelse {
+        if (force) fatal("{s}: package not found: {s}", .{ pkg_config_exe, lib_name });
+        return;
+    };
+    const pkg = pc.all[found_index];
+
+    const result = process.run(arena, io, .{
+        .argv = &.{ pkg_config_exe, pkg.name, "--cflags", "--libs" },
+        .environ_map = environ_map,
+    }) catch |err| {
+        if (force) fatal("failed running {s}: {t}", .{ pkg_config_exe, err });
+        return;
+    };
+    if (!result.term.success()) {
+        if (result.stderr.len != 0) std.log.err("{s}: {s}", .{ pkg_config_exe, result.stderr });
+        if (force) fatal("{s} {f}", .{ pkg_config_exe, result.term });
+        return;
+    }
+
+    const parsed = std.zig.PkgConfig.parse(arena, result.stdout) catch |err| switch (err) {
+        error.InvalidPkgConfigOutput => {
+            if (force) return fatal("{s} package {s} invalid output: {s}", .{
+                pkg_config_exe, pkg.name, result.stdout,
+            });
+            return;
+        },
+        error.OutOfMemory => fatal("out of memory parsing pkg-config output", .{}),
+    };
+    if (parsed.unknown_flags.len != 0) {
+        if (force) {
+            for (parsed.unknown_flags) |unknown_flag| {
+                std.log.err("{s} package {s} unknown flag: {s}", .{ pkg_config_exe, pkg.name, unknown_flag });
+            }
+            fatal("pkg-config output contained unknown flags", .{});
+        } else {
+            for (parsed.unknown_flags) |unknown_flag| {
+                std.log.warn("{s} package {s} unknown flag: {s}", .{ pkg_config_exe, pkg.name, unknown_flag });
+            }
+            std.log.warn("skipping pkg-config for package {s} due to unknown flags", .{pkg.name});
+            return;
+        }
+    }
+
+    system_lib.pkg_conf = parsed;
 }
