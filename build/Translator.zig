@@ -129,6 +129,18 @@ pub fn initInner(
         }));
     }
 
+    run.addPrefixedDirectoryArg("--zig-lib=", .zig_lib);
+
+    addFlag(run, "module-libs", options.module_libs);
+    addFlag(run, "pub-static", options.pub_static);
+    addFlag(run, "func-bodies", options.func_bodies);
+    addFlag(run, "keep-macro-literals", options.keep_macro_literals);
+    addFlag(run, "default-init", options.default_init);
+
+    if (options.strict_flex_arrays) |level| {
+        run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@intFromEnum(level)}));
+    }
+
     run.addArg("--");
 
     run.addFileArg(options.c_source_file);
@@ -146,15 +158,6 @@ pub fn initInner(
     }
 
     appendIncludeArg(run, "-resource-dir", tc_conf.aro_resource_dir);
-
-    addFlag(run, "module-libs", options.module_libs);
-    addFlag(run, "pub-static", options.pub_static);
-    addFlag(run, "func-bodies", options.func_bodies);
-    addFlag(run, "keep-macro-literals", options.keep_macro_literals);
-    addFlag(run, "default-init", options.default_init);
-    if (options.strict_flex_arrays) |level| {
-        run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@intFromEnum(level)}));
-    }
 
     return .{
         .output_file = output_file,

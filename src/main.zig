@@ -92,10 +92,14 @@ fn translate(
     var strict_flex_arrays: Translator.StrictFlexArraysLevel = .@"2";
     var target_query: std.Target.Query = .{};
     var link_libc = false;
+    var link_libcpp = false;
+    var link_libunwind = false;
 
     var system_libs: std.ArrayList(SystemLib) = .empty;
     var any_want_pkg_conf = false;
     var any_force_pkg_conf = false;
+    var optimize_mode: std.lang.OptimizeMode = .Debug;
+    var opt_zig_lib_path: ?[]const u8 = null;
 
     var aro_args: std.ArrayList([]const u8) = try .initCapacity(arena, args.len);
 
@@ -149,8 +153,15 @@ fn translate(
             try aro_args.ensureUnusedCapacity(arena, 2);
             aro_args.appendAssumeCapacity("-o");
             aro_args.appendAssumeCapacity(rest);
+        } else if (mem.cutPrefix(u8, arg, "-O=")) |rest| {
+            optimize_mode = std.meta.stringToEnum(std.lang.OptimizeMode, rest) orelse
+                fatal("bad optimize mode: {s}", .{rest});
         } else if (mem.eql(u8, arg, "-lc")) {
             link_libc = true;
+        } else if (mem.eql(u8, arg, "-lc++")) {
+            link_libcpp = true;
+        } else if (mem.eql(u8, arg, "-lunwind")) {
+            link_libunwind = true;
         } else if (mem.cutPrefix(u8, arg, "-l=")) |rest| {
             try system_libs.append(arena, .{
                 .options = .{
@@ -167,11 +178,165 @@ fn translate(
                 .yes => any_want_pkg_conf = true,
                 .force => any_force_pkg_conf = true,
             }
+        } else if (mem.cutPrefix(u8, arg, "--zig-lib=")) |rest| {
+            opt_zig_lib_path = rest;
         } else if (mem.eql(u8, arg, "--")) {
             try aro_args.appendSlice(arena, args[i + 1 ..]);
             break;
         } else {
             fatal("unrecognized translate-c argument: {s}", .{arg});
+        }
+    }
+
+    const zig_lib_path = opt_zig_lib_path orelse fatal("missing --zig-lib=[path] argument", .{});
+
+    try aro_args.append(arena, "-nostdlibinc");
+
+    switch (optimize_mode) {
+        .Debug => {},
+        .ReleaseSafe => {
+            try aro_args.append(arena, "-D_FORTIFY_SOURCE=2");
+        },
+        .ReleaseFast, .ReleaseSmall => {
+            try aro_args.append(arena, "-DNDEBUG");
+        },
+    }
+
+    const target = std.zig.resolveTargetQueryOrFatal(io, target_query);
+
+    switch (target.os.tag) {
+        // LLVM doesn't distinguish between Solaris and illumos, but the illumos GCC fork
+        // defines this macro.
+        .illumos => try aro_args.append(arena, "__illumos__"),
+        // Homebrew targets without LLVM support; use communities's preferred macros.
+        .@"3ds" => try aro_args.append(arena, "-D__3DS__"),
+        .psp => try aro_args.append(arena, "-D__PSP__"),
+        .vita => try aro_args.append(arena, "-D__vita__"),
+        else => {},
+    }
+
+    if (link_libc) {
+        if (target.isGnuLibC()) {
+            const target_version = target.os.versionRange().gnuLibCVersion().?;
+            const glibc_minor_define = try std.fmt.allocPrint(arena, "-D__GLIBC_MINOR__={d}", .{
+                target_version.minor,
+            });
+            try aro_args.append(arena, glibc_minor_define);
+        } else if (target.isMinGW()) {
+            try aro_args.append(arena, "-D__MSVCRT_VERSION__=0xE00"); // use ucrt
+
+            const minver: u16 = @truncate(@intFromEnum(target.os.versionRange().windows.min) >> 16);
+            try aro_args.append(
+                arena,
+                try std.fmt.allocPrint(arena, "-D_WIN32_WINNT=0x{x:0>4}", .{minver}),
+            );
+
+            // MinGW-w64's inline functions in headers (e.g. `fabs`), which are emitted with `linkonce_odr`
+            // linkage, sometimes cause duplicate symbol errors due to us providing the same symbols with
+            // `weak` linkage in compiler-rt or libzigc. So just disable them. Besides, they undermine the
+            // goal of moving more libc code to Zig, and they're also just kind of unnecessary since LLVM is
+            // perfectly capable of recognizing and optimizing libcalls.
+            try aro_args.append(arena, "-D__CRT__NO_INLINE");
+        } else if (target.isFreeBSDLibC()) {
+            // https://docs.freebsd.org/en/books/porters-handbook/versions
+            const min_ver = target.os.version_range.semver.min;
+            try aro_args.append(arena, try std.fmt.allocPrint(arena, "-D__FreeBSD_version={d}", .{
+                // We don't currently respect the minor and patch components. This wouldn't be particularly
+                // helpful because our abilists file only tracks major FreeBSD releases, so the link-time stub
+                // symbols would be inconsistent with header declarations.
+                min_ver.major * 100_000 + 500,
+            }));
+        } else if (target.isNetBSDLibC()) {
+            const min_ver = target.os.version_range.semver.min;
+            try aro_args.append(arena, try std.fmt.allocPrint(arena, "-D__NetBSD_Version__={d}", .{
+                // We don't currently respect the patch component. This wouldn't be particularly helpful because
+                // our abilists file only tracks major and minor NetBSD releases, so the link-time stub symbols
+                // would be inconsistent with header declarations.
+                (min_ver.major * 100_000_000) + (min_ver.minor * 1_000_000),
+            }));
+        } else if (target.isOpenBSDLibC()) {
+            const min_ver = target.os.version_range.semver.min;
+            // The macro in sys/param.h doesn't have the leading underscores, but we don't want to pollute the
+            // global namespace in all compilation units. So we use leading underscores and modify sys/param.h
+            // to just alias this one.
+            try aro_args.append(arena, try std.fmt.allocPrint(arena, "-D___OpenBSD={d}", .{
+                // Brilliantly, OpenBSD defines this macro to the year and month of the release, so we need to
+                // maintain a manual mapping here whenever we update the headers.
+                202510,
+            }));
+            // We can't avoid pollution for this one...
+            try aro_args.append(arena, try std.fmt.allocPrint(arena, "-DOpenBSD{d}_{d}", .{
+                min_ver.major,
+                min_ver.minor,
+            }));
+        }
+    }
+
+    if (link_libcpp) {
+        try aro_args.ensureUnusedCapacity(arena, 4);
+        aro_args.appendAssumeCapacity("-isystem");
+        aro_args.appendAssumeCapacity(try Io.Dir.path.join(arena, &.{ zig_lib_path, "libcxx", "include" }));
+
+        aro_args.appendAssumeCapacity("-isystem");
+        aro_args.appendAssumeCapacity(try Io.Dir.path.join(arena, &.{ zig_lib_path, "libcxxabi", "include" }));
+
+        //try libcxx.addCxxArgs(comp, arena, aro_args);
+    }
+
+    const is_native_os = target_query.isNativeOs();
+    const is_native_abi = target_query.isNativeAbi();
+
+    const libc_dirs = std.zig.LibCDirs.detect(
+        arena,
+        io,
+        zig_lib_path,
+        &target,
+        is_native_abi,
+        link_libc,
+        null, // https://codeberg.org/ziglang/translate-c/issues/387
+        environ_map,
+    ) catch |err| fatal("failed detecting libc: {t}", .{err});
+
+    // Skipping -isystem zig/lib/include because those are for Clang, not Aro.
+
+    try aro_args.ensureUnusedCapacity(arena, libc_dirs.libc_include_dir_list.len * 2);
+    for (libc_dirs.libc_include_dir_list) |include_dir| {
+        aro_args.appendAssumeCapacity("-isystem");
+        aro_args.appendAssumeCapacity(include_dir);
+    }
+
+    const native_paths: ?std.zig.system.NativePaths = if (is_native_os and is_native_abi) p: {
+        const native_paths = std.zig.system.NativePaths.detect(arena, io, &target, environ_map) catch |err|
+            fatal("unable to detect native system paths: {t}", .{err});
+        for (native_paths.warnings.items) |warning| {
+            std.log.warn("{s}", .{warning});
+        }
+        break :p native_paths;
+    } else null;
+
+    if (native_paths) |np| {
+        try aro_args.ensureUnusedCapacity(arena, np.include_dirs.items.len * 2);
+        for (np.include_dirs.items) |include_path| {
+            aro_args.appendAssumeCapacity("-isystem");
+            aro_args.appendAssumeCapacity(include_path);
+        }
+    }
+
+    if (link_libunwind) {
+        try aro_args.ensureUnusedCapacity(arena, 2);
+        aro_args.appendAssumeCapacity("-isystem");
+        aro_args.appendAssumeCapacity(try Io.Dir.path.join(arena, &.{ zig_lib_path, "libunwind", "include" }));
+    }
+
+    try aro_args.ensureUnusedCapacity(arena, libc_dirs.libc_framework_dir_list.len * 2);
+    for (libc_dirs.libc_framework_dir_list) |framework_dir| {
+        try aro_args.appendSlice(arena, &.{ "-iframework", framework_dir });
+    }
+
+    if (native_paths) |np| {
+        try aro_args.ensureUnusedCapacity(arena, np.framework_dirs.items.len * 2);
+        for (np.framework_dirs.items) |framework_dir| {
+            try aro_args.appendSlice(arena, &.{ "-F", framework_dir });
         }
     }
 
