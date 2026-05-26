@@ -94,7 +94,7 @@ pub fn initInner(
     options: Options,
 ) Translator {
     // Try our best to get a reasonable name; we need one to name the steps and the output file.
-    const name = options.name orelse std.fs.path.stem(b.fmt("{f}", .{options.c_source_file.fmt(b.graph)}));
+    const name = options.name orelse std.fs.path.stem(b.fmt("{f}", .{options.c_source_file}));
 
     // We start with the basic command: 'path/to/translate-c in.c -o out.zig -MD -MV -MF deps.d'
     const run = b.addRunArtifact(tc_conf.exe);
