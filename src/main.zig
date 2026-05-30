@@ -148,7 +148,7 @@ fn translate(
             target_query = std.zig.parseTargetQueryOrReportFatalError(arena, .{
                 .arch_os_abi = rest,
             });
-            try aro_args.append(arena, try std.fmt.allocPrint(arena, "--target={s}", .{rest}));
+            try aro_args.append(arena, arg);
         } else if (mem.cutPrefix(u8, arg, "-o=")) |rest| {
             try aro_args.ensureUnusedCapacity(arena, 2);
             aro_args.appendAssumeCapacity("-o");
