@@ -74,6 +74,7 @@ pub const Options = struct {
     /// Control when to treat a trailing array as a flexible array member (default: 2).
     /// 0: any trailing array, 1: size [0]/[1]/[], 2: size [0]/[] (default), 3: [] only.
     strict_flex_arrays: ?enum { @"0", @"1", @"2", @"3" } = null,
+    libc_file: ?std.Build.LazyPath = null,
 };
 
 pub fn init(translate_c_dep: *Build.Dependency, options: Options) Translator {
@@ -139,6 +140,10 @@ pub fn initInner(
 
     if (options.strict_flex_arrays) |level| {
         run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@intFromEnum(level)}));
+    }
+
+    if (options.libc_file) |libc_file| {
+        run.addPrefixedFileArg("--libc=", libc_file);
     }
 
     run.addArg("--");

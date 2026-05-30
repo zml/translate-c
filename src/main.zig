@@ -55,6 +55,7 @@ pub const usage =
     \\Options:
     \\  --help                      Print this message
     \\  --version                   Print translate-c version
+    \\  --libc=<file>               Provide a file which specifies libc paths
     \\  -fmodule-libs               Import libraries as modules
     \\  -fno-module-libs            (default) Install libraries next to output file
     \\  -fpub-static                (default) Translate static functions as pub
@@ -94,6 +95,7 @@ fn translate(
     var link_libc = false;
     var link_libcpp = false;
     var link_libunwind = false;
+    var libc_paths_file: ?[]const u8 = null;
 
     var system_libs: std.ArrayList(SystemLib) = .empty;
     var any_want_pkg_conf = false;
@@ -119,6 +121,8 @@ fn translate(
             try stdout.interface.writeAll("0.0.0-dev\n");
             try stdout.interface.flush();
             return;
+        } else if (mem.cutPrefix(u8, arg, "--libc=")) |rest| {
+            libc_paths_file = rest;
         } else if (mem.eql(u8, arg, "-fmodule-libs")) {
             module_libs = true;
         } else if (mem.eql(u8, arg, "-fno-module-libs")) {
@@ -285,6 +289,10 @@ fn translate(
 
     const is_native_os = target_query.isNativeOs();
     const is_native_abi = target_query.isNativeAbi();
+    const libc_installation = if (libc_paths_file) |libc_file|
+        std.zig.LibCInstallation.parse(arena, io, libc_file, &target) catch |err| fatal("failed to parse '{s}': {t}", .{ libc_file, err })
+    else
+        null;
 
     const libc_dirs = std.zig.LibCDirs.detect(
         arena,
@@ -293,7 +301,7 @@ fn translate(
         &target,
         is_native_abi,
         link_libc,
-        null, // https://codeberg.org/ziglang/translate-c/issues/387
+        if (libc_installation) |l| &l else null,
         environ_map,
     ) catch |err| fatal("failed detecting libc: {t}", .{err});
 
