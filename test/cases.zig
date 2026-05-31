@@ -36,6 +36,7 @@ pub fn lowerCases(
     translator_conf: Translator.TranslateCConfig,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    test_filters: []const []const u8,
     test_cross_targets: bool,
     test_translate_step: *std.Build.Step,
     test_run_translated_step: *std.Build.Step,
@@ -67,6 +68,11 @@ pub fn lowerCases(
         if (entry.kind != .file) continue;
         const case = caseFromFile(b, entry) catch |err|
             std.debug.panic("failed to process case '{s}': {s}", .{ entry.path, @errorName(err) });
+        if (test_filters.len > 0) {
+            for (test_filters) |filter| {
+                if (std.mem.find(u8, case.name, filter) != null) break;
+            } else continue;
+        }
 
         const source_file = b.addWriteFiles().add("tmp.c", case.input);
 

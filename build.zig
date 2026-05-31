@@ -6,6 +6,7 @@ pub fn build(b: *std.Build) void {
     const skip_translate = b.option(bool, "skip-translate", "Main test suite skips translate tests") orelse false;
     const skip_run_translated = b.option(bool, "skip-run-translated", "Main test suite skips run-translated tests") orelse false;
     const test_cross_targets = b.option(bool, "test-cross-targets", "Include cross-translation targets in the test cases") orelse false;
+    const test_filters = b.option([]const []const u8, "test-filter", "Skip tests that do not match any filter") orelse &[0][]const u8{};
     const use_llvm = b.option(bool, "llvm", "Use LLVM backend to generate aro executable");
     const link_libc = b.option(bool, "link-libc", "Link libc") orelse (optimize != .Debug);
 
@@ -95,7 +96,7 @@ pub fn build(b: *std.Build) void {
         unit_tests_mod.addImport("aro", aro.module("aro"));
         unit_tests_mod.addImport("helpers", helpers);
         unit_tests_mod.addImport("c_builtins", c_builtins);
-        break :step &b.addRunArtifact(b.addTest(.{ .root_module = unit_tests_mod })).step;
+        break :step &b.addRunArtifact(b.addTest(.{ .root_module = unit_tests_mod, .filters = test_filters })).step;
     });
 
     const test_macros_step = b.step("test-macros", "Run macro tests");
@@ -115,7 +116,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         }).mod);
-        break :step &b.addRunArtifact(b.addTest(.{ .root_module = macro_tests_mod })).step;
+        break :step &b.addRunArtifact(b.addTest(.{ .root_module = macro_tests_mod, .filters = test_filters })).step;
     });
 
     const test_translate_step = b.step("test-translate", "Run the C translation tests");
@@ -125,6 +126,7 @@ pub fn build(b: *std.Build) void {
         translator_conf,
         target,
         optimize,
+        test_filters,
         test_cross_targets,
         test_translate_step,
         test_run_translated_step,
