@@ -86,18 +86,22 @@ pub fn lowerCases(
                 case_target.query.zigTriple(b.graph.arena) catch @panic("OOM"),
                 case.name,
             });
+
+            var args_array: std.ArrayList([]const u8) = .empty;
+            defer args_array.deinit(b.graph.arena);
+            if (case.args) |args| {
+                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
+                while (arg_it.next()) |arg| {
+                    args_array.append(b.graph.arena, arg) catch @panic("OOM");
+                }
+            }
             const translator: Translator = .initInner(b, translator_conf, .{
                 .name = name_and_triple,
                 .c_source_file = source_file,
                 .target = case_target,
                 .optimize = optimize,
+                .extra_args = args_array.items,
             });
-            if (case.args) |args| {
-                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
-                while (arg_it.next()) |arg| {
-                    translator.run.addArg(arg);
-                }
-            }
             switch (case.kind) {
                 .translate => |output| {
                     const check_file = b.addCheckFile(translator.output_file, .{ .expected_matches = output });
