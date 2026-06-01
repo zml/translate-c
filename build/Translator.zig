@@ -75,6 +75,7 @@ pub const Options = struct {
     /// 0: any trailing array, 1: size [0]/[1]/[], 2: size [0]/[] (default), 3: [] only.
     strict_flex_arrays: ?enum { @"0", @"1", @"2", @"3" } = null,
     libc_file: ?std.Build.LazyPath = null,
+    extra_args: []const []const u8 = &.{},
 };
 
 pub fn init(translate_c_dep: *Build.Dependency, options: Options) Translator {
@@ -144,6 +145,10 @@ pub fn initInner(
 
     if (options.libc_file) |libc_file| {
         run.addPrefixedFileArg("--libc=", libc_file);
+    }
+
+    for (options.extra_args) |arg| {
+        run.addArg(arg);
     }
 
     run.addArg("--");

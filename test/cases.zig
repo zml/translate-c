@@ -36,6 +36,7 @@ pub fn lowerCases(
     translator_conf: Translator.TranslateCConfig,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    test_filters: []const []const u8,
     test_cross_targets: bool,
     test_translate_step: *std.Build.Step,
     test_run_translated_step: *std.Build.Step,
@@ -67,6 +68,11 @@ pub fn lowerCases(
         if (entry.kind != .file) continue;
         const case = caseFromFile(b, entry) catch |err|
             std.debug.panic("failed to process case '{s}': {s}", .{ entry.path, @errorName(err) });
+        if (test_filters.len > 0) {
+            for (test_filters) |filter| {
+                if (std.mem.find(u8, case.name, filter) != null) break;
+            } else continue;
+        }
 
         const source_file = b.addWriteFiles().add("tmp.c", case.input);
 
@@ -80,18 +86,22 @@ pub fn lowerCases(
                 case_target.query.zigTriple(b.graph.arena) catch @panic("OOM"),
                 case.name,
             });
+
+            var args_array: std.ArrayList([]const u8) = .empty;
+            defer args_array.deinit(b.graph.arena);
+            if (case.args) |args| {
+                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
+                while (arg_it.next()) |arg| {
+                    args_array.append(b.graph.arena, arg) catch @panic("OOM");
+                }
+            }
             const translator: Translator = .initInner(b, translator_conf, .{
                 .name = name_and_triple,
                 .c_source_file = source_file,
                 .target = case_target,
                 .optimize = optimize,
+                .extra_args = args_array.items,
             });
-            if (case.args) |args| {
-                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
-                while (arg_it.next()) |arg| {
-                    translator.run.addArg(arg);
-                }
-            }
             switch (case.kind) {
                 .translate => |output| {
                     const check_file = b.addCheckFile(translator.output_file, .{ .expected_matches = output });
