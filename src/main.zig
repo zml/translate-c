@@ -379,7 +379,10 @@ fn translate(
 
     for (system_libs.items) |*system_lib| {
         if (system_lib.pkg_conf) |parsed| {
-            try aro_args.appendSlice(arena, parsed.cflags);
+            try aro_args.ensureUnusedCapacity(arena, parsed.cflags.len + 1);
+            aro_args.appendSliceAssumeCapacity(parsed.cflags);
+            if (parsed.pthread)
+                aro_args.appendAssumeCapacity("-pthread");
         }
     }
 
