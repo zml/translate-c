@@ -9,6 +9,7 @@ const Tree = aro.Tree;
 const Node = Tree.Node;
 const TokenIndex = Tree.TokenIndex;
 const QualType = aro.QualType;
+const Type = aro.TypeStore.Type;
 
 const ast = @import("ast.zig");
 const ZigNode = ast.Node;
@@ -563,7 +564,7 @@ fn mangleWeakGlobalName(t: *Translator, want_name: []const u8) Error![]const u8 
 
 fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!void {
     const base = record_qt.base(t.comp);
-    const record_ty = switch (base.type) {
+    const record_ty: Type.Record = switch (base.type) {
         .@"struct", .@"union" => |record_ty| record_ty,
         else => unreachable,
     };
@@ -611,27 +612,8 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
         var functions: std.ArrayList(ZigNode) = .empty;
         defer functions.deinit(t.gpa);
 
+        const head_field_alignment = t.headFieldAlignment(record_ty);
         var unnamed_field_count: u32 = 0;
-
-        // If a record doesn't have any attributes that would affect the alignment and
-        // layout, then we can just use a simple `extern` type. If it does have attributes,
-        // then we need to inspect the layout and assign an `align` value for each field.
-        const has_alignment_attributes = aligned: {
-            if (record_qt.hasAttribute(t.comp, .@"packed")) break :aligned true;
-            if (record_qt.hasAttribute(t.comp, .aligned)) break :aligned true;
-            for (record_ty.fields) |field| {
-                const field_attrs = field.attributes(t.comp);
-                for (field_attrs) |field_attr| {
-                    switch (field_attr.tag) {
-                        .@"packed", .aligned => break :aligned true,
-                        else => {},
-                    }
-                }
-            }
-            break :aligned false;
-        };
-        const head_field_alignment: ?c_uint = if (has_alignment_attributes) t.headFieldAlignment(record_ty) else null;
-
         for (record_ty.fields, 0..) |field, field_index| {
             const field_loc = field.name_tok;
 
@@ -698,11 +680,6 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
                 break :init ZigTag.opaque_literal.init();
             }
 
-            const field_alignment = if (has_alignment_attributes)
-                t.alignmentForField(record_ty, head_field_alignment, field_index)
-            else
-                null;
-
             // C99 introduced designated initializers for structs. Omitted fields are implicitly
             // initialized to zero. Some C APIs are designed with this in mind. Defaulting to zero
             // values for translated struct fields permits Zig code to comfortably use such an API.
@@ -714,7 +691,7 @@ fn transRecordDecl(t: *Translator, scope: *Scope, record_qt: QualType) Error!voi
             fields.appendAssumeCapacity(.{
                 .name = field_name,
                 .type = field_type,
-                .alignment = field_alignment,
+                .alignment = t.alignmentForField(record_ty, head_field_alignment, field_index),
                 .default_value = default_value,
             });
         }
@@ -1330,7 +1307,7 @@ fn transType(t: *Translator, scope: *Scope, qt: QualType, source_loc: TokenIndex
 /// the fields with 0 offset need an `align` qualifier. Strictly speaking, we could just
 /// pedantically assign those fields the same alignment as the parent's pointer alignment,
 /// but this helps the generated code to be a little less verbose.
-fn headFieldAlignment(t: *Translator, record_decl: aro.Type.Record) ?c_uint {
+fn headFieldAlignment(t: *Translator, record_decl: aro.Type.Record) ?usize {
     const bits_per_byte = 8;
     const parent_ptr_alignment_bits = record_decl.layout.?.pointer_alignment_bits;
     const parent_ptr_alignment = parent_ptr_alignment_bits / bits_per_byte;
@@ -1349,19 +1326,11 @@ fn headFieldAlignment(t: *Translator, record_decl: aro.Type.Record) ?c_uint {
 /// required to fulfill the requested alignment, which means we'd risk generating different code
 /// if we only look at the user-requested alignment.
 ///
-/// Returns a ?c_uint to match Clang's behavior of using c_uint. The return type can be changed
-/// after the Clang frontend for translate-c is removed. A null value indicates that a field is
-/// 'naturally aligned'.
-fn alignmentForField(
-    t: *Translator,
-    record_decl: aro.Type.Record,
-    head_field_alignment: ?c_uint,
-    field_index: usize,
-) ?c_uint {
+/// A null value indicates that a field is 'naturally aligned'.
+fn alignmentForField(t: *Translator, record_decl: aro.Type.Record, head_field_alignment: ?usize, field_index: usize) ?usize {
     const fields = record_decl.fields;
     assert(fields.len != 0);
     const field = fields[field_index];
-
     const bits_per_byte = 8;
     const parent_ptr_alignment_bits = record_decl.layout.?.pointer_alignment_bits;
     const parent_ptr_alignment = parent_ptr_alignment_bits / bits_per_byte;
@@ -1373,10 +1342,9 @@ fn alignmentForField(
     }
 
     const field_offset_bits: u64 = field.layout.offset_bits;
-    const field_size_bits: u64 = field.layout.size_bits;
 
-    // Fields with zero width always have an alignment of 1
-    if (field_size_bits == 0) {
+    // Union and struct fields with zero width always have an alignment of 1
+    if (field.layout.size_bits == 0 and field.qt.getRecord(t.comp) != null) {
         return 1;
     }
 

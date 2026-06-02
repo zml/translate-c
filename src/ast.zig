@@ -645,7 +645,7 @@ pub const Payload = struct {
         pub const Field = struct {
             name: []const u8,
             type: Node,
-            alignment: ?c_uint,
+            alignment: ?usize,
             default_value: ?Node,
         };
     };
