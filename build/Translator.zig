@@ -147,10 +147,7 @@ pub fn initInner(
         run.addPrefixedFileArg("--libc=", libc_file);
     }
 
-    for (options.extra_args) |arg| {
-        run.addArg(arg);
-    }
-
+    run.addArgs(options.extra_args);
     run.addArg("--");
 
     run.addFileArg(options.c_source_file);
