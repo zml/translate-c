@@ -294,6 +294,12 @@ pub inline fn strlen(s: [*c]const u8) usize {
     return std.mem.sliceTo(s, 0).len;
 }
 
+pub fn sub_overflow(a: anytype, b: anytype, result: *@TypeOf(a, b)) bool {
+    const res = @subWithOverflow(a, b);
+    result.* = res[0];
+    return res[1] == 1;
+}
+
 pub inline fn truncf(val: f32) f32 {
     return @trunc(val);
 }
