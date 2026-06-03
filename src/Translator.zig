@@ -1708,6 +1708,10 @@ fn transStmt(t: *Translator, scope: *Scope, stmt: Node.Index) TransError!ZigNode
         .asm_stmt => {
             return t.fail(error.UnsupportedTranslation, stmt.tok(t.tree), "TODO asm stmt", .{});
         },
+        .codegen_diagnostic => {
+            // Could be translated as `if (true) @compileError(...)`, ignore for now.
+            return t.fail(error.UnsupportedTranslation, stmt.tok(t.tree), "TODO codegen diagnostic", .{});
+        },
         else => return t.transExprCoercing(scope, stmt, .unused),
     }
 }
@@ -2383,6 +2387,7 @@ fn transExpr(t: *Translator, scope: *Scope, expr: Node.Index, used: ResultUsed) 
         .union_forward_decl,
         .enum_forward_decl,
         .empty_decl,
+        .codegen_diagnostic,
         => unreachable, // not an expression
     });
 }

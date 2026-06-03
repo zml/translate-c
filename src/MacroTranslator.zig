@@ -269,7 +269,8 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
     // +3 for prefix and +2 for suffix
     var bytes = try std.ArrayList(u8).initCapacity(arena, lit_bytes.len + 3 + 2);
 
-    const prefix = aro.Tree.Token.NumberPrefix.fromString(lit_bytes);
+    const allow_msvc_suffixes = mt.t.comp.langopts.allowFixedSizedIntSuffixes();
+    const prefix = aro.Tree.Token.NumberPrefix.fromString(lit_bytes, allow_msvc_suffixes);
     switch (prefix) {
         .binary => bytes.appendSliceAssumeCapacity("0b"),
         .octal => bytes.appendSliceAssumeCapacity("0o"),
@@ -335,7 +336,7 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
     };
 
     const is_float = after_int.len != suffix_str.len;
-    const suffix = aro.Tree.Token.NumberSuffix.fromString(suffix_str, if (is_float) .float else .int) orelse {
+    const suffix = aro.Tree.Token.NumberSuffix.fromString(suffix_str, if (is_float) .float else .int, allow_msvc_suffixes) orelse {
         try mt.fail("invalid number suffix: '{s}'", .{suffix_str});
         return error.ParseError;
     };

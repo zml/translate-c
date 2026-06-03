@@ -41,9 +41,12 @@ pub fn main(init: process.Init) !void {
     var toolchain: aro.Toolchain = .{ .driver = &driver };
     defer toolchain.deinit();
 
-    translate(&driver, &toolchain, init.environ_map, args) catch |err| switch (err) {
+    var stdout_buf: [512]u8 = undefined;
+    var stdout = Io.File.stdout().writer(io, &stdout_buf);
+    translate(&driver, &toolchain, init.environ_map, &stdout.interface, args) catch |err| switch (err) {
+        error.FatalError => process.exit(1),
+        error.WriteFailed => return stdout.err.?,
         else => |e| return e,
-        error.WriteFailed => @panic("aro shouldn't return this error because it doesn't accept a *Writer"),
     };
     if (comp.diagnostics.errors != 0) process.exit(1);
     return process.cleanExit(io);
@@ -79,6 +82,7 @@ fn translate(
     d: *aro.Driver,
     tc: *aro.Toolchain,
     environ_map: *const process.Environ.Map,
+    stdout: *Io.Writer,
     args: []const [:0]const u8,
 ) !void {
     const arena = d.comp.arena;
@@ -109,17 +113,13 @@ fn translate(
 
     for (args[1..], 1..) |arg, i| {
         if (mem.eql(u8, arg, "--help")) {
-            var stdout_buf: [512]u8 = undefined;
-            var stdout = Io.File.stdout().writer(io, &stdout_buf);
-            try stdout.interface.print(usage, .{args[0]});
-            try stdout.interface.flush();
+            try stdout.print(usage, .{args[0]});
+            try stdout.flush();
             return;
         } else if (mem.eql(u8, arg, "--version")) {
-            var stdout_buf: [512]u8 = undefined;
-            var stdout = Io.File.stdout().writer(io, &stdout_buf);
             // TODO add version
-            try stdout.interface.writeAll("0.0.0-dev\n");
-            try stdout.interface.flush();
+            try stdout.writeAll("0.0.0-dev\n");
+            try stdout.flush();
             return;
         } else if (mem.cutPrefix(u8, arg, "--libc=")) |rest| {
             libc_paths_file = rest;
@@ -197,27 +197,24 @@ fn translate(
     try aro_args.append(arena, "-nostdlibinc");
 
     switch (optimize_mode) {
-        .Debug => {},
+        .Debug => {
+            try aro_args.append(arena, "-O0");
+        },
         .ReleaseSafe => {
+            try aro_args.append(arena, "-O2");
             try aro_args.append(arena, "-D_FORTIFY_SOURCE=2");
         },
-        .ReleaseFast, .ReleaseSmall => {
+        .ReleaseFast => {
+            try aro_args.append(arena, "-O2");
+            try aro_args.append(arena, "-DNDEBUG");
+        },
+        .ReleaseSmall => {
+            try aro_args.append(arena, "-Os");
             try aro_args.append(arena, "-DNDEBUG");
         },
     }
 
     const target = std.zig.resolveTargetQueryOrFatal(io, target_query);
-
-    switch (target.os.tag) {
-        // LLVM doesn't distinguish between Solaris and illumos, but the illumos GCC fork
-        // defines this macro.
-        .illumos => try aro_args.append(arena, "__illumos__"),
-        // Homebrew targets without LLVM support; use communities's preferred macros.
-        .@"3ds" => try aro_args.append(arena, "-D__3DS__"),
-        .psp => try aro_args.append(arena, "-D__PSP__"),
-        .vita => try aro_args.append(arena, "-D__vita__"),
-        else => {},
-    }
 
     if (link_libc) {
         if (target.isGnuLibC()) {
@@ -305,7 +302,8 @@ fn translate(
         environ_map,
     ) catch |err| fatal("failed detecting libc: {t}", .{err});
 
-    // Skipping -isystem zig/lib/include because those are for Clang, not Aro.
+    // Supplement Aro builtin headers with Clang builtin headers
+    try aro_args.appendSlice(arena, &.{ "-idirafter", try Io.Dir.path.join(arena, &.{ zig_lib_path, "include" }) });
 
     try aro_args.ensureUnusedCapacity(arena, libc_dirs.libc_include_dir_list.len * 2);
     for (libc_dirs.libc_include_dir_list) |include_dir| {

@@ -9,8 +9,8 @@
 
     .dependencies = .{
         .aro = .{
-            .url = "git+https://codeberg.org/ziglang/arocc#e86063cf4dfd95e8a898f01e2c65cf6fccedb598",
-            .hash = "aro-0.0.0-JSD1QqO_OABFwQ7sIbrkG_Es077a3egrqA28ontD2e_D",
+            .url = "git+https://codeberg.org/ziglang/arocc#107a0250a4d6c86010facfbee1c437108a280718",
+            .hash = "aro-0.0.0-JSD1Qum6OgB83hmRWguTl2Z9x3rEjHWIu8f_RsMXJTTg",
         },
     },
 
