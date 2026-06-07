@@ -377,6 +377,14 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
             .UL => "c_ulong",
             .LL => "c_longlong",
             .ULL => "c_ulonglong",
+            .I8 => "i8",
+            .UI8 => "u8",
+            .I16 => "i16",
+            .UI16 => "u16",
+            .I32 => "i32",
+            .UI32 => "u32",
+            .I64 => "i64",
+            .UI64 => "u64",
             else => unreachable,
         });
         const value = std.fmt.parseInt(i128, bytes.items, 0) catch math.maxInt(i128);
@@ -390,6 +398,14 @@ fn parseCNumLit(mt: *MacroTranslator) ParseError!ZigNode {
             .UL => math.cast(u32, value) != null,
             .LL => math.cast(i64, value) != null,
             .ULL => math.cast(u64, value) != null,
+            .I8 => math.cast(i8, value) != null,
+            .UI8 => math.cast(u8, value) != null,
+            .I16 => math.cast(i16, value) != null,
+            .UI16 => math.cast(u16, value) != null,
+            .I32 => math.cast(i32, value) != null,
+            .UI32 => math.cast(u32, value) != null,
+            .I64 => math.cast(i64, value) != null,
+            .UI64 => math.cast(u64, value) != null,
             else => unreachable,
         };
 
