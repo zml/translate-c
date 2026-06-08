@@ -13,6 +13,7 @@ pub const Builtin = struct {
 
 pub const map = std.StaticStringMap(Builtin).initComptime([_]struct { []const u8, Builtin }{
     .{ "__builtin_abs", .{ .name = "abs" } },
+    .{ "__builtin_add_overflow", .{ .name = "add_overflow" } },
     .{ "__builtin_assume", .{ .name = "assume" } },
     .{ "__builtin_bswap16", .{ .name = "bswap16", .tag = .byte_swap } },
     .{ "__builtin_bswap32", .{ .name = "bswap32", .tag = .byte_swap } },
@@ -64,6 +65,7 @@ pub const map = std.StaticStringMap(Builtin).initComptime([_]struct { []const u8
     .{ "__builtin_sqrt", .{ .name = "sqrt", .tag = .sqrt } },
     .{ "__builtin_strcmp", .{ .name = "strcmp" } },
     .{ "__builtin_strlen", .{ .name = "strlen" } },
+    .{ "__builtin_sub_overflow", .{ .name = "sub_overflow" } },
     .{ "__builtin_truncf", .{ .name = "truncf", .tag = .trunc } },
     .{ "__builtin_trunc", .{ .name = "trunc", .tag = .trunc } },
     .{ "__builtin_unreachable", .{ .name = "unreachable", .tag = .@"unreachable" } },

@@ -5,6 +5,12 @@ pub inline fn abs(val: c_int) c_int {
     return if (val == std.math.minInt(c_int)) val else @intCast(@abs(val));
 }
 
+pub fn add_overflow(a: anytype, b: anytype, result: *@TypeOf(a, b)) bool {
+    const res = @addWithOverflow(a, b);
+    result.* = res[0];
+    return res[1] == 1;
+}
+
 pub inline fn assume(cond: bool) void {
     if (!cond) unreachable;
 }
@@ -200,10 +206,10 @@ pub inline fn memset(dst: ?*anyopaque, val: c_int, len: usize) ?*anyopaque {
     return dst;
 }
 
-pub fn mul_overflow(a: anytype, b: anytype, result: *@TypeOf(a, b)) c_int {
+pub fn mul_overflow(a: anytype, b: anytype, result: *@TypeOf(a, b)) bool {
     const res = @mulWithOverflow(a, b);
     result.* = res[0];
-    return res[1];
+    return res[1] == 1;
 }
 
 /// returns a quiet NaN. Quiet NaNs have many representations; tagp is used to select one in an
@@ -286,6 +292,12 @@ pub inline fn strcmp(s1: [*c]const u8, s2: [*c]const u8) c_int {
 
 pub inline fn strlen(s: [*c]const u8) usize {
     return std.mem.sliceTo(s, 0).len;
+}
+
+pub fn sub_overflow(a: anytype, b: anytype, result: *@TypeOf(a, b)) bool {
+    const res = @subWithOverflow(a, b);
+    result.* = res[0];
+    return res[1] == 1;
 }
 
 pub inline fn truncf(val: f32) f32 {
