@@ -2861,11 +2861,14 @@ fn transBinaryCondExpr(
     used: ResultUsed,
 ) TransError!ZigNode {
     // GNU extension of the ternary operator where the middle expression is
-    // omitted, the condition itself is returned if it evaluates to true.
+    // omitted (<foo> ?: <bar>), <foo> is returned if it evaluates to true, otherwise <bar> is returned.
+    // see https://gcc.gnu.org/onlinedocs/gcc/Conditionals.html
 
     if (used == .unused) {
         // Result unused so this can be translated as
-        // if (condition) else_expr;
+        // if (!condition) else_expr;
+        // This is because if the first operand is nonzero, the expression short-circuits.
+        // That means the else-case is evaluated if the first operand _is_ zero.
         var cond_scope: Scope.Condition = .{
             .base = .{
                 .parent = scope,
@@ -2873,9 +2876,11 @@ fn transBinaryCondExpr(
             },
         };
         defer cond_scope.deinit();
+        const cond = try t.transBoolExpr(&cond_scope.base, conditional.cond);
+        const negated_cond = try ZigTag.not.create(t.arena, cond);
 
         return ZigTag.@"if".create(t.arena, .{
-            .cond = try t.transBoolExpr(&cond_scope.base, conditional.cond),
+            .cond = negated_cond,
             .then = try t.transExpr(scope, conditional.else_expr, .unused),
             .@"else" = null,
         });
