@@ -75,6 +75,7 @@ pub const Options = struct {
     /// 0: any trailing array, 1: size [0]/[1]/[], 2: size [0]/[] (default), 3: [] only.
     strict_flex_arrays: ?enum { @"0", @"1", @"2", @"3" } = null,
     libc_file: ?std.Build.LazyPath = null,
+    /// Extra arguments passed to Aro
     extra_args: []const []const u8 = &.{},
 };
 
@@ -147,8 +148,8 @@ pub fn initInner(
         run.addPrefixedFileArg("--libc=", libc_file);
     }
 
-    run.addArgs(options.extra_args);
     run.addArg("--");
+    run.addArgs(options.extra_args);
 
     run.addFileArg(options.c_source_file);
     run.addArgs(&.{ "-MD", "-MV", "-MF" });

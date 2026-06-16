@@ -1,5 +1,6 @@
 const std = @import("std");
 const Translator = @import("../build/Translator.zig");
+const mem = std.mem;
 
 const cross_targets: []const []const u8 = &.{
     "aarch64-freebsd",
@@ -87,21 +88,31 @@ pub fn lowerCases(
                 case.name,
             });
 
-            var args_array: std.ArrayList([]const u8) = .empty;
-            defer args_array.deinit(b.graph.arena);
-            if (case.args) |args| {
-                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
-                while (arg_it.next()) |arg| {
-                    args_array.append(b.graph.arena, arg) catch @panic("OOM");
-                }
-            }
-            const translator: Translator = .initInner(b, translator_conf, .{
+            var options: Translator.Options = .{
                 .name = name_and_triple,
                 .c_source_file = source_file,
                 .target = case_target,
                 .optimize = optimize,
-                .extra_args = args_array.items,
-            });
+            };
+
+            // var args_array: std.ArrayList([]const u8) = .empty;
+            // defer args_array.deinit(b.graph.arena);
+            if (case.args) |args| {
+                var arg_it = std.mem.tokenizeScalar(u8, args, ' ');
+                while (arg_it.next()) |arg| {
+                    if (mem.eql(u8, arg, "-fdefault-init")) {
+                        options.default_init = true;
+                    } else if (mem.cutPrefix(u8, arg, "-fstrict-flex-arrays=")) |rest| {
+                        if (rest.len != 1 or rest[0] < '0' or rest[0] > '3') {
+                            @panic("Bad case: -fstrict-flex-arrays= requires a value of '0', '1', '2', or '3'");
+                        }
+                        options.strict_flex_arrays = @enumFromInt(rest[0] - '0');
+                    } else {
+                        @panic("Unhandled arg in cases");
+                    }
+                }
+            }
+            const translator: Translator = .initInner(b, translator_conf, options);
             switch (case.kind) {
                 .translate => |output| {
                     const check_file = b.addCheckFile(translator.output_file, .{ .expected_matches = output });
