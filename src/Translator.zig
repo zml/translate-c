@@ -2151,7 +2151,7 @@ fn transExpr(t: *Translator, scope: *Scope, expr: Node.Index, used: ResultUsed) 
         .paren_expr => |paren_expr| {
             return t.transExpr(scope, paren_expr.operand, used);
         },
-        .cast => |cast| return t.transCastExpr(scope, cast, cast.qt, used, .with_as),
+        .cast => |cast| return t.maybeTransCastExpr(scope, cast, cast.qt, used, .with_as),
         .decl_ref_expr => |decl_ref| try t.transDeclRefExpr(scope, decl_ref),
         .enumeration_ref => |enum_ref| try t.transDeclRefExpr(scope, enum_ref),
         .addr_of_expr => |addr_of_expr| try ZigTag.address_of.create(t.arena, try t.transExpr(scope, addr_of_expr.operand, .used)),
@@ -2408,7 +2408,7 @@ fn transExprCoercing(t: *Translator, scope: *Scope, expr: Node.Index, used: Resu
                 return t.transExprCoercing(scope, cast.operand, used);
             },
             .lval_to_rval => return t.transExprCoercing(scope, cast.operand, used),
-            else => return t.transCastExpr(scope, cast, cast.qt, used, .no_as),
+            else => return t.maybeTransCastExpr(scope, cast, cast.qt, used, .no_as),
         },
         .default_init_expr => |default_init| return try t.transDefaultInit(scope, default_init, used, .no_as),
         .compound_literal_expr => |literal| {
@@ -2479,6 +2479,20 @@ fn finishBoolExpr(t: *Translator, qt: QualType, node: ZigNode) TransError!ZigNod
     unreachable; // Unexpected bool expression type
 }
 
+fn maybeTransCastExpr(
+    t: *Translator,
+    scope: *Scope,
+    cast: Node.Cast,
+    dest_qt: QualType,
+    used: ResultUsed,
+    suppress_as: SuppressCast,
+) TransError!ZigNode {
+    return if (used == .used)
+        t.transCastExpr(scope, cast, dest_qt, used, suppress_as)
+    else
+        t.transExpr(scope, cast.operand, used);
+}
+
 fn transCastExpr(
     t: *Translator,
     scope: *Scope,
@@ -2515,8 +2529,7 @@ fn transCastExpr(
             break :int_cast try t.transIntCast(operand, src_qt, dest_qt);
         },
         .to_void => {
-            assert(used == .unused);
-            return try t.transExpr(scope, cast.operand, .unused);
+            return try t.transExpr(scope, cast.operand, used);
         },
         .null_to_pointer => ZigTag.null_literal.init(),
         .array_to_pointer => array_to_pointer: {
@@ -2840,18 +2853,26 @@ fn transCondExpr(
     const res_is_bool = conditional.qt.is(t.comp, .bool);
     const cond = try t.transBoolExpr(&cond_scope.base, conditional.cond);
 
-    var then_body = try t.transExpr(scope, conditional.then_expr, used);
+    // Translate all inside expressions as if we're using the result. This
+    // includes possible nested conditional expressions (which individually
+    // suppressing would cause syntax errors because the suppression is
+    // technically a statement).
+
+    var then_body = try t.transExpr(scope, conditional.then_expr, .used);
     if (!res_is_bool and then_body.isBoolRes()) {
         then_body = try ZigTag.int_from_bool.create(t.arena, then_body);
     }
 
-    var else_body = try t.transExpr(scope, conditional.else_expr, used);
+    var else_body = try t.transExpr(scope, conditional.else_expr, .used);
     if (!res_is_bool and else_body.isBoolRes()) {
         else_body = try ZigTag.int_from_bool.create(t.arena, else_body);
     }
 
-    // The `ResultUsed` is forwarded to both branches so no need to suppress the result here.
-    return ZigTag.@"if".create(t.arena, .{ .cond = cond, .then = then_body, .@"else" = else_body });
+    // The result we suppress if need be.
+    return t.maybeSuppressResult(
+        used,
+        try ZigTag.@"if".create(t.arena, .{ .cond = cond, .then = then_body, .@"else" = else_body }),
+    );
 }
 
 fn transBinaryCondExpr(

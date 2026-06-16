@@ -10,5 +10,9 @@ void foo() {
 // pub export fn foo() void {
 //     var a: c_int = undefined;
 //     _ = &a;
-//     if (a != 0) a = 2 else _ = bar();
+//     _ = if (a != 0) blk: {
+//         const tmp = @as(c_int, 2);
+//         a = tmp;
+//         break :blk tmp;
+//     } else bar();
 // }
