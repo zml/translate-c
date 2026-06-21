@@ -26,6 +26,8 @@ const translate_c = b.dependency("translate_c", .{});
 const t: Translator = .init(translate_c, .{
     .c_source_file = b.path("to_translate.h"),
     .target = target,
+    // This is the optimization mode of the C code being translated and
+    // the resulting Zig code.
     .optimize = optimize,
     // more options go here (see below)
 });
