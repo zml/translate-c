@@ -463,10 +463,14 @@ fn transDecl(t: *Translator, scope: *Scope, decl: Node.Index) !void {
         => return,
 
         .function => |function| {
-            if (function.definition) |definition| {
-                return t.transFnDecl(scope, definition.get(t.tree).function);
+            // If there is going to be a definition later, wait until we reach it before
+            // generating it. This works because Zig has order independent analysis and
+            // is fine with the definition appearing later. However, since C has order
+            // dependent analysis, we cannot safely emit the definition yet, since we
+            // first need to translate any declarations that appear before the definition.
+            if (function.definition == null) {
+                try t.transFnDecl(scope, function);
             }
-            try t.transFnDecl(scope, function);
         },
 
         .variable => |variable| {
