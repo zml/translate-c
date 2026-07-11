@@ -6,10 +6,10 @@ on:
       - main
   pull_request:
     paths:
-      - '**.zig'
-      - '**.zon'
-      - '**.c'
-      - '**.h'
+      - "**.zig"
+      - "**.zon"
+      - "**.c"
+      - "**.h"
   workflow_dispatch:
 
 # This cancels older workflow runs on pull requests while ensuring that there
@@ -75,5 +75,6 @@ jobs:
       - name: Run Cross-Translation Tests
         run: zig build test --maxrss ${{ env.ZSF_MAX_RSS }} -Doptimize=Debug -Dtest-cross-targets
 
-      - name: Run Examples
-        run: zig build all --maxrss ${{ env.ZSF_MAX_RSS }} --build-file examples/build.zig
+      # --build-file is broken in the CI
+      # - name: Run Examples
+      #   run: zig build all --maxrss ${{ env.ZSF_MAX_RSS }} --build-file examples/build.zig
