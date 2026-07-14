@@ -782,36 +782,8 @@ fn transFnDecl(t: *Translator, scope: *Scope, function: Node.Function, decl_node
         .is_export = !function.static and has_body and !is_always_inline and !function.@"inline" and linkage == .strong,
         .is_pub = scope.id == .root and (!function.static or t.pub_static),
         .has_body = has_body,
-        .cc = switch (func_ty.cc) {
-            .default => .c,
-            .cdecl => .c,
-            .stdcall => .x86_stdcall,
-            .thiscall => .x86_thiscall,
-            .fastcall => .x86_fastcall,
-            .regcall => .x86_regcall,
-            .riscv_vector_cc => switch (t.comp.target.cpu.arch) {
-                .riscv32, .riscv32be => .riscv32_ilp32_v,
-                .riscv64, .riscv64be => .riscv64_lp64_v,
-                else => unreachable,
-            },
-            .riscv_vls_cc => return t.failDecl(scope, fn_decl_loc, fn_name, "TODO riscv_vls_cc", .{}),
-            .aarch64_sve_pcs => .aarch64_sve_pcs,
-            .aarch64_vector_pcs => .aarch64_vfabi,
-            .arm_aapcs => .arm_aapcs,
-            .arm_aapcs_vfp => .arm_aapcs_vfp,
-            .vectorcall => switch (t.comp.target.cpu.arch) {
-                .x86 => .x86_vectorcall,
-                .x86_64 => .x86_64_vectorcall,
-                .aarch64, .aarch64_be => .aarch64_vfabi,
-                else => .c,
-            },
-            .ms_abi => switch (t.comp.target.cpu.arch) {
-                .x86_64 => .x86_64_win,
-                .aarch64, .aarch64_be => .aarch64_aapcs_win,
-                else => .c,
-            },
-            .sysv_abi => .x86_64_sysv,
-        },
+        .cc = if (is_always_inline) .c else t.transCallingConvention(func_ty.cc) catch
+            return t.failDecl(scope, fn_decl_loc, fn_name, "TODO {s}", .{@tagName(func_ty.cc)}),
         .linksection_string = if (t.tree.attr_map.getAttribute(decl_node, .section)) |attr| attr.args.section else null,
         .alignment = t.tree.attr_map.requestedAlignment(decl_node, t.comp) orelse null,
         .noreturn = t.tree.attr_map.hasAttribute(decl_node, .noreturn),
@@ -823,6 +795,10 @@ fn transFnDecl(t: *Translator, scope: *Scope, function: Node.Function, decl_node
         },
         error.OutOfMemory => |e| return e,
     };
+
+    if (is_always_inline and func_ty.cc != .default) {
+        try t.warn(&t.global_scope.base, fn_decl_loc, "{s} calling convention ignored on inline function", .{@tagName(func_ty.cc)});
+    }
 
     const proto_payload = proto_node.castTag(.func).?;
     if (!has_body) {
@@ -1267,7 +1243,11 @@ fn transType(t: *Translator, scope: *Scope, qt: QualType, source_loc: TokenIndex
                 .variable => return t.fail(error.UnsupportedType, source_loc, "VLA unsupported '{s}'", .{try t.getTypeStr(qt)}),
             }
         },
-        .func => |func_ty| return t.transFnType(scope, func_ty, source_loc, .{}),
+        .func => |func_ty| {
+            return t.transFnType(scope, func_ty, source_loc, .{
+                .cc = t.transCallingConvention(func_ty.cc) catch return t.fail(error.UnsupportedType, source_loc, "TODO {s}", .{@tagName(func_ty.cc)}),
+            });
+        },
         .@"struct", .@"union" => |record_ty| {
             var trans_scope = scope;
             if (!record_ty.isAnonymous(t.comp)) {
@@ -1423,6 +1403,38 @@ fn alignmentForField(t: *Translator, record_decl: aro.Type.Record, head_field_al
             return possible_alignment;
         }
     }
+}
+
+fn transCallingConvention(t: *Translator, cc: aro.Type.Func.CallingConvention) !ast.Payload.Func.CallingConvention {
+    return switch (cc) {
+        .default, .cdecl => .c,
+        .stdcall => .x86_stdcall,
+        .thiscall => .x86_thiscall,
+        .fastcall => .x86_fastcall,
+        .regcall => .x86_regcall,
+        .riscv_vector_cc => switch (t.comp.target.cpu.arch) {
+            .riscv32, .riscv32be => .riscv32_ilp32_v,
+            .riscv64, .riscv64be => .riscv64_lp64_v,
+            else => unreachable,
+        },
+        .riscv_vls_cc => return error.UnsupportedCallingConvention,
+        .aarch64_sve_pcs => .aarch64_sve_pcs,
+        .aarch64_vector_pcs => .aarch64_vfabi,
+        .arm_aapcs => .arm_aapcs,
+        .arm_aapcs_vfp => .arm_aapcs_vfp,
+        .vectorcall => switch (t.comp.target.cpu.arch) {
+            .x86 => .x86_vectorcall,
+            .x86_64 => .x86_64_vectorcall,
+            .aarch64, .aarch64_be => .aarch64_vfabi,
+            else => .c,
+        },
+        .ms_abi => switch (t.comp.target.cpu.arch) {
+            .x86_64 => .x86_64_win,
+            .aarch64, .aarch64_be => .aarch64_aapcs_win,
+            else => .c,
+        },
+        .sysv_abi => .x86_64_sysv,
+    };
 }
 
 const FnProtoContext = struct {
