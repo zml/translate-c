@@ -1122,10 +1122,9 @@ fn transStaticAssert(t: *Translator, scope: *Scope, static_assert: Node.StaticAs
         var allocating: std.Io.Writer.Allocating = .init(t.gpa);
         defer allocating.deinit();
 
-        allocating.writer.writeAll("\"static assertion failed \\") catch return error.OutOfMemory;
+        allocating.writer.writeAll("\"static assertion failed \\\"") catch return error.OutOfMemory;
 
-        aro.Value.printString(bytes, str_qt, t.comp, &allocating.writer) catch return error.OutOfMemory;
-        allocating.writer.end -= 1; // printString adds a terminating " so we need to remove it
+        aro.Value.printString(bytes, str_qt, t.comp, &allocating.writer, .bare) catch return error.OutOfMemory;
         allocating.writer.writeAll("\\\"\"") catch return error.OutOfMemory;
 
         break :str try ZigTag.string_literal.create(t.arena, try t.arena.dupe(u8, allocating.written()));
@@ -1141,7 +1140,7 @@ fn transGlobalAsm(t: *Translator, scope: *Scope, global_asm: Node.GlobalAsm) Err
 
     var allocating: std.Io.Writer.Allocating = try .initCapacity(t.gpa, bytes.len);
     defer allocating.deinit();
-    aro.Value.printString(bytes, global_asm.asm_str.qt(t.tree), t.comp, &allocating.writer) catch return error.OutOfMemory;
+    aro.Value.printString(bytes, global_asm.asm_str.qt(t.tree), t.comp, &allocating.writer, .quoted) catch return error.OutOfMemory;
 
     const str_node = try ZigTag.string_literal.create(t.arena, try t.arena.dupe(u8, allocating.written()));
 
@@ -3667,7 +3666,7 @@ fn transNarrowStringLiteral(
     var allocating: std.Io.Writer.Allocating = try .initCapacity(t.gpa, bytes.len);
     defer allocating.deinit();
 
-    aro.Value.printString(bytes, literal.qt, t.comp, &allocating.writer) catch return error.OutOfMemory;
+    aro.Value.printString(bytes, literal.qt, t.comp, &allocating.writer, .quoted) catch return error.OutOfMemory;
 
     return ZigTag.string_literal.create(t.arena, try t.arena.dupe(u8, allocating.written()));
 }

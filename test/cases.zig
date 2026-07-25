@@ -106,7 +106,7 @@ pub fn lowerCases(
                         if (rest.len != 1 or rest[0] < '0' or rest[0] > '3') {
                             @panic("Bad case: -fstrict-flex-arrays= requires a value of '0', '1', '2', or '3'");
                         }
-                        options.strict_flex_arrays = @enumFromInt(rest[0] - '0');
+                        options.strict_flex_arrays = @fromBackingInt(@intCast(rest[0] - '0'));
                     } else {
                         @panic("Unhandled arg in cases");
                     }

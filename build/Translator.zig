@@ -112,7 +112,7 @@ pub fn initInner(
         .link_libc = options.link_libc,
     });
 
-    if (options.optimize != .Debug) {
+    if (options.optimize != .debug) {
         run.addArg(b.fmt("-O={t}", .{options.optimize}));
     }
 
@@ -129,9 +129,9 @@ pub fn initInner(
         run.addArg(b.fmt("-l={d}{d}{d}{d}{d},{s}", .{
             @intFromBool(lsl.options.needed),
             @intFromBool(lsl.options.weak),
-            @intFromEnum(lsl.options.use_pkg_config),
-            @intFromEnum(lsl.options.preferred_link_mode),
-            @intFromEnum(lsl.options.search_strategy),
+            @backingInt(lsl.options.use_pkg_config),
+            @backingInt(lsl.options.preferred_link_mode),
+            @backingInt(lsl.options.search_strategy),
             lsl.name,
         }));
     }
@@ -145,7 +145,7 @@ pub fn initInner(
     addFlag(run, "default-init", options.default_init);
 
     if (options.strict_flex_arrays) |level| {
-        run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@intFromEnum(level)}));
+        run.addArg(b.fmt("-fstrict-flex-arrays={d}", .{@backingInt(level)}));
     }
 
     if (options.libc_file) |libc_file| {

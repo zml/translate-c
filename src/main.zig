@@ -168,7 +168,7 @@ fn translate(
             if (rest.len != 1 or rest[0] < '0' or rest[0] > '3') {
                 return d.fatal("-fstrict-flex-arrays= requires a value of '0', '1', '2', or '3'", .{});
             }
-            strict_flex_arrays = @enumFromInt(rest[0] - '0');
+            strict_flex_arrays = @fromBackingInt(@intCast(rest[0] - '0'));
         } else if (mem.cutPrefix(u8, arg, "--target=")) |rest| {
             target_query = std.zig.parseTargetQueryOrReportFatalError(arena, .{
                 .arch_os_abi = rest,
@@ -192,9 +192,9 @@ fn translate(
                 .options = .{
                     .needed = (rest[0] - '0') != 0,
                     .weak = (rest[1] - '0') != 0,
-                    .use_pkg_config = @enumFromInt(rest[2] - '0'),
-                    .preferred_link_mode = @enumFromInt(rest[3] - '0'),
-                    .search_strategy = @enumFromInt(rest[4] - '0'),
+                    .use_pkg_config = @fromBackingInt(@intCast(rest[2] - '0')),
+                    .preferred_link_mode = @fromBackingInt(@intCast(rest[3] - '0')),
+                    .search_strategy = @fromBackingInt(@intCast(rest[4] - '0')),
                 },
                 .name = rest[6..],
             });
@@ -247,7 +247,7 @@ fn translate(
         } else if (target.isMinGW()) {
             try aro_args.append(arena, "-D__MSVCRT_VERSION__=0xE00"); // use ucrt
 
-            const minver: u16 = @truncate(@intFromEnum(target.os.versionRange().windows.min) >> 16);
+            const minver: u16 = @truncate(@backingInt(target.os.versionRange().windows.min) >> 16);
             try aro_args.append(
                 arena,
                 try std.fmt.allocPrint(arena, "-D_WIN32_WINNT=0x{x:0>4}", .{minver}),
@@ -414,7 +414,7 @@ fn translate(
             return d.fatal("user provided macro source exceeded max size", .{});
         }
 
-        const content = try macro_buf.toOwnedSlice(gpa);
+        const content = try macro_buf.toOwnedSliceSentinel(gpa, 0);
         errdefer gpa.free(content);
 
         break :macros try d.comp.addSourceFromOwnedBuffer("<command line>", content, .user);
