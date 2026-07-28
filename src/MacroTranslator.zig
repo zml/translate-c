@@ -1330,6 +1330,11 @@ fn parseCPostfixExprInner(mt: *MacroTranslator, scope: *Scope, type_name: ?ZigNo
                         switch (next_id) {
                             .comma => {
                                 mt.i += 1;
+                                // Check for trailing comma
+                                if (mt.peek() == .r_brace) {
+                                    mt.i += 1;
+                                    break;
+                                }
                             },
                             .r_brace => {
                                 mt.i += 1;
@@ -1357,6 +1362,11 @@ fn parseCPostfixExprInner(mt: *MacroTranslator, scope: *Scope, type_name: ?ZigNo
                     switch (next_id) {
                         .comma => {
                             mt.i += 1;
+                            // Check for trailing comma
+                            if (mt.peek() == .r_brace) {
+                                mt.i += 1;
+                                break;
+                            }
                         },
                         .r_brace => {
                             mt.i += 1;
