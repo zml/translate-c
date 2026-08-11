@@ -11,4 +11,4 @@ _Static_assert(sizeof(foo) == 4, "bad size for foo");
 //
 // pub const foo = opaque {};
 //
-// 6:16: warning: unable to translate _Static_assert condition
+// 6:28: warning: unable to translate _Static_assert condition
