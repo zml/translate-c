@@ -48,6 +48,7 @@ pub const Node = extern union {
         /// items => body,
         switch_prong,
         break_val,
+        break_label,
         @"return",
         field_access,
         field_builtin,
@@ -387,6 +388,7 @@ pub const Node = extern union {
                 .@"while" => Payload.While,
                 .@"switch", .array_init, .switch_prong => Payload.Switch,
                 .break_val => Payload.BreakVal,
+                .break_label => Payload.BreakLabel,
                 .call => Payload.Call,
                 .var_decl => Payload.VarDecl,
                 .func => Payload.Func,
@@ -459,6 +461,9 @@ pub const Node = extern union {
         return switch (node.tag()) {
             .block => {
                 const block_node = node.castTag(.block).?;
+                // A labeled block can always be exited early via `break :label`,
+                // so control may resume after it regardless of the final statement.
+                if (block_node.data.label != null) return false;
                 if (block_node.data.stmts.len == 0) return false;
 
                 const last = block_node.data.stmts[block_node.data.stmts.len - 1];
@@ -480,7 +485,7 @@ pub const Node = extern union {
                 return true;
             },
             .@"return", .return_void => true,
-            .@"break" => true,
+            .@"break", .break_label => true,
             .@"continue" => true,
             .@"unreachable" => true,
             else => false,
@@ -566,6 +571,13 @@ pub const Payload = struct {
         data: struct {
             label: ?[]const u8,
             val: Node,
+        },
+    };
+
+    pub const BreakLabel = struct {
+        base: Payload,
+        data: struct {
+            label: []const u8,
         },
     };
 
@@ -1096,6 +1108,20 @@ fn renderNode(c: *Context, node: Node) Allocator.Error!NodeIndex {
                 .main_token = tok,
                 .data = .{ .opt_token_and_opt_node = .{
                     .fromToken(break_label), (try renderNode(c, payload.val)).toOptional(),
+                } },
+            });
+        },
+        .break_label => {
+            const payload = node.castTag(.break_label).?.data;
+            const tok = try c.addToken(.keyword_break, "break");
+            _ = try c.addToken(.colon, ":");
+            const label = try c.addIdentifier(payload.label);
+            return c.addNode(.{
+                .tag = .@"break",
+                .main_token = tok,
+                .data = .{ .opt_token_and_opt_node = .{
+                    .fromToken(label),
+                    .none,
                 } },
             });
         },
@@ -2571,6 +2597,7 @@ fn renderNodeGrouped(c: *Context, node: Node) !NodeIndex {
         .@"while",
         .@"break",
         .break_val,
+        .break_label,
         .pub_inline_fn,
         .discard,
         .@"continue",

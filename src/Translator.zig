@@ -1649,7 +1649,7 @@ fn transStmt(t: *Translator, scope: *Scope, stmt: Node.Index) TransError!ZigNode
         .do_while_stmt => |do_while_stmt| return t.transDoWhileStmt(scope, do_while_stmt),
         .for_stmt => |for_stmt| return t.transForStmt(scope, for_stmt),
         .continue_stmt => return ZigTag.@"continue".init(),
-        .break_stmt => return ZigTag.@"break".init(),
+        .break_stmt => return t.transBreakStmt(scope),
         .typedef => |typedef_decl| {
             assert(!typedef_decl.implicit);
             try t.transTypeDef(scope, stmt);
@@ -1843,7 +1843,7 @@ fn transDoWhileStmt(t: *Translator, scope: *Scope, do_stmt: Node.DoWhileStmt) Tr
     const cond = try t.transBoolExpr(&cond_scope.base, do_stmt.cond);
     const if_not_break = switch (cond.tag()) {
         .true_literal => {
-            const body_node = try t.maybeBlockify(scope, do_stmt.body);
+            const body_node = try t.maybeBlockify(&loop_scope, do_stmt.body);
             return ZigTag.while_true.create(t.arena, body_node);
         },
         else => try ZigTag.if_not_break.create(t.arena, cond),
@@ -1933,19 +1933,24 @@ fn transForStmt(t: *Translator, scope: *Scope, for_stmt: Node.ForStmt) TransErro
 }
 
 fn transSwitch(t: *Translator, scope: *Scope, switch_stmt: Node.SwitchStmt) TransError!ZigNode {
-    var loop_scope: Scope = .{
-        .parent = scope,
-        .id = .loop,
-    };
-
-    var block_scope = try Scope.Block.init(t, &loop_scope, false);
+    var block_scope = try Scope.Block.init(t, scope, true);
     defer block_scope.deinit();
 
-    const base_scope = &block_scope.base;
+    var switch_scope: Scope.Switch = .{
+        .base = .{
+            .parent = &block_scope.base,
+            .id = .@"switch",
+        },
+        .label = block_scope.label.?,
+    };
+
+    const base_scope = &switch_scope.base;
 
     var cond_scope: Scope.Condition = .{
         .base = .{
-            .parent = base_scope,
+            // The switch condition is not in the switch scope yet, so any `break`s
+            // should apply to the outer scope e.g. `switch ({ if (x == 1) break; 0; })`.
+            .parent = &block_scope.base,
             .id = .condition,
         },
     };
@@ -2011,11 +2016,11 @@ fn transSwitch(t: *Translator, scope: *Scope, switch_stmt: Node.SwitchStmt) Tran
         .cond = switch_expr,
         .cases = try t.arena.dupe(ZigNode, cases.items),
     });
+    if (!switch_scope.label_used) {
+        block_scope.label = null;
+    }
     try block_scope.statements.append(t.gpa, switch_node);
-    try block_scope.statements.append(t.gpa, ZigTag.@"break".init());
-    const while_body = try block_scope.complete();
-
-    return ZigTag.while_true.create(t.arena, while_body);
+    return try block_scope.complete();
 }
 
 /// Collects all items for this case, returns the first statement after the labels.
@@ -2119,6 +2124,30 @@ fn transSwitchProngStmtInline(
                         if (result.isNoreturn()) return;
                     },
                 }
+            },
+        }
+    }
+}
+
+fn transBreakStmt(t: *Translator, inner: *Scope) TransError!ZigNode {
+    var scope = inner;
+
+    while (true) {
+        switch (scope.id) {
+            .root, .loop, .do_loop => {
+                return ZigTag.@"break".init();
+            },
+            .@"switch" => {
+                const switch_scope: *Scope.Switch =
+                    @fieldParentPtr("base", scope);
+
+                switch_scope.label_used = true;
+                return ZigTag.break_label.create(t.arena, .{
+                    .label = switch_scope.label,
+                });
+            },
+            .block, .condition => {
+                scope = scope.parent.?;
             },
         }
     }
